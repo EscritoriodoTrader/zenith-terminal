@@ -71,15 +71,14 @@ body {
 /* BOTÃO DO MOTOR (POWER) */
 .motor-btn {
     margin-left: auto;
-    background: rgba(255,255,255,0.05);
-    border: 1px solid rgba(255,255,255,0.1);
-    border-radius: 8px;
+    background: transparent;
+    border: none;
     cursor: pointer;
     display: flex;
     align-items: center;
     justify-content: center;
     padding: 6px;
-    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    transition: all 0.3s ease;
 }
 
 .motor-btn svg {
@@ -89,16 +88,12 @@ body {
 
 .motor-btn.on { 
     color: #089981; 
-    background: rgba(8, 153, 129, 0.15);
-    border-color: #089981;
-    box-shadow: 0 0 15px rgba(8, 153, 129, 0.3);
+    filter: drop-shadow(0 0 8px rgba(8, 153, 129, 0.8));
 }
 
 .motor-btn.off { 
     color: #f23645; 
-    background: rgba(242, 54, 69, 0.15);
-    border-color: #f23645;
-    box-shadow: 0 0 10px rgba(242, 54, 69, 0.2);
+    filter: drop-shadow(0 0 5px rgba(242, 54, 69, 0.5));
 }
 
 .motor-btn:hover { transform: scale(1.1); }

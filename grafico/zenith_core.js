@@ -637,7 +637,6 @@ document.getElementById('tool-hand').onclick = () => { activeTool = activeTool =
 document.getElementById('tool-search').onclick = () => { searchOverlay.classList.add('active'); searchInput.value = ''; searchInput.focus(); };
 document.getElementById('tool-zoom-in').onclick = () => { visibleCandles *= 0.8; if (visibleCandles < 1) visibleCandles = 1; autoScale(); };
 document.getElementById('tool-zoom-out').onclick = () => { visibleCandles *= 1.2; if (visibleCandles > 100) visibleCandles = 100; autoScale(); };
-document.getElementById('motor-toggle').onclick = function() { this.classList.toggle('on'); this.classList.toggle('off'); };
 document.getElementById('conn-status').onclick = function() { this.classList.toggle('on'); this.classList.toggle('off'); };
 // Sincronização em tempo real e salvamento individual
 function updatePickerUI(input) {

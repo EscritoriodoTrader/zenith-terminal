@@ -11,7 +11,8 @@ import json
 # CONFIGURAÇÕES DO SISTEMA
 # ==========================================
 EXCEL_FILE_NAME = "Fluxo.xlsm"
-SHEET_NAME = "Dados_RTD"
+SHEET_RTD = "Dados_RTD"
+SHEET_HISTORICO = "Historico"
 SERVER_HOST = "zenith-terminal-bvj4.onrender.com"
 POST_URL = f"https://{SERVER_HOST}/api/trades"
 SCAN_INTERVAL = 0.005 
@@ -19,7 +20,8 @@ SCAN_INTERVAL = 0.005
 # Fila de transmissão e Sincronização
 tx_queue = queue.Queue()
 session = requests.Session()
-is_active = False # Controle de Standby
+is_active = False 
+last_historical_ts = 0 
 
 def on_message(ws, message):
     global is_active
@@ -32,7 +34,6 @@ def on_message(ws, message):
     except: pass
 
 def start_ws():
-    """Conecta ao servidor para ouvir o comando de Ligar/Desligar"""
     def run():
         while True:
             try:
@@ -43,11 +44,9 @@ def start_ws():
             time.sleep(5)
     threading.Thread(target=run, daemon=True).start()
 
-# Inicia o ouvinte de status em background
 start_ws()
 
 def tx_worker():
-    """Worker para enviar dados ao servidor Node.js sem travar a leitura do Excel"""
     print("[TX]: Canal de transmissão iniciado.")
     while True:
         try:
@@ -60,7 +59,6 @@ def tx_worker():
         except: pass
 
 def clear_database():
-    """Envia um comando para limpar o banco de dados no início da sessão"""
     try:
         print("[INIT]: Solicitando limpeza do banco de dados para nova sessão...")
         requests.delete(f"https://{SERVER_HOST}/api/trades/clear", timeout=5)
@@ -68,64 +66,119 @@ def clear_database():
     except Exception as e:
         print(f"[INIT ERROR]: Falha ao resetar banco: {e}")
 
-def get_excel_app():
-    """Busca o Excel aberto e a aba correta"""
+def get_sheet(name):
     try:
         if len(xw.apps) == 0: return None
         for app in xw.apps:
             for book in app.books:
                 if EXCEL_FILE_NAME in book.name:
-                    return book.sheets[SHEET_NAME]
+                    return book.sheets[name]
         return None
     except: return None
 
 def process_time(val, now):
-    """Converte o valor de tempo do Excel para Timestamp MS"""
     try:
         if isinstance(val, (float, int)):
             seconds = int(val * 86400)
             h, m, s = (seconds // 3600) % 24, (seconds // 60) % 60, seconds % 60
         else:
-            parts = str(val).split(':')
+            # Tenta tratar "00:00:00,000" ou "00:00:00.000"
+            parts = str(val).replace(',', '.').split(':')
             h = int(parts[0])
             m = int(parts[1])
-            s = int(parts[2].split('.')[0]) if len(parts) > 2 else 0
+            s = int(float(parts[2]))
         
         dt = now.replace(hour=h, minute=m, second=s, microsecond=0)
         if dt > now + datetime.timedelta(minutes=1): dt -= datetime.timedelta(days=1)
         return int(dt.timestamp() * 1000), f"{h:02d}:{m:02d}:{s:02d}"
     except: return None, None
 
+def read_historical_data(sent_buffer):
+    """Lê a aba Histórico dinamicamente (Colunas A, C, D, F)"""
+    global last_historical_ts
+    sheet_h = get_sheet(SHEET_HISTORICO)
+    if not sheet_h:
+        print(f"[HISTORICO]: Aba '{SHEET_HISTORICO}' não encontrada.")
+        return
+    
+    print(f"[HISTORICO]: Detectando tamanho do histórico...")
+    # Encontra a última linha preenchida na coluna A
+    last_row = sheet_h.range("A" + str(sheet_h.cells.last_cell.row)).end('up').row
+    if last_row < 2: 
+        print("[HISTORICO]: Aba vazia.")
+        return
+
+    print(f"[HISTORICO]: Lendo {last_row - 1} linhas...")
+    # Lê as colunas A até F (0 a 5 no índice Python)
+    data = sheet_h.range(f"A2:F{last_row}").value
+    if not isinstance(data[0], list): data = [data] # Trata caso de 1 única linha
+
+    now = datetime.datetime.now()
+    hist_trades = []
+    counters = {}
+
+    for row in data:
+        if not row or len(row) < 6: continue
+        
+        time_val = row[0]   # Coluna A
+        price_val = row[2]  # Coluna C
+        qty_val = row[3]    # Coluna D
+        side_val = str(row[5]).upper() # Coluna F (Agressor)
+
+        if time_val and price_val and qty_val:
+            ts, time_str = process_time(time_val, now)
+            if ts:
+                price, qty = float(price_val), int(qty_val)
+                # Normaliza o lado (Compra/Venda, Buy/Sell, etc)
+                side = "BUY" if "C" in side_val or "B" in side_val else "SELL"
+                
+                sig = f"{side}_{time_str}_{price}_{qty}"
+                counters[sig] = counters.get(sig, 0) + 1
+                uid = f"{sig}_{counters[sig]}"
+                
+                if uid not in sent_buffer:
+                    hist_trades.append({"id": uid, "timestamp": ts, "price": price, "quantity": qty, "side": side})
+                    sent_buffer.add(uid)
+                    if ts > last_historical_ts: last_historical_ts = ts
+
+    if hist_trades:
+        print(f"[HISTORICO]: Enviando {len(hist_trades)} trades históricos...")
+        for i in range(0, len(hist_trades), 500):
+            tx_queue.put({"trades": hist_trades[i:i+500], "last_price": 0, "variation": 0})
+        print(f"[HISTORICO]: Finalizado. Sincronizado até {datetime.datetime.fromtimestamp(last_historical_ts/1000).strftime('%H:%M:%S')}")
+
 def main():
-    print("--- ZENITH SCANNER V5.1: STANDBY MODE ---")
-    
-    # Inicia Thread de Envio
+    global last_historical_ts
+    print("--- ZENITH SCANNER V5.3: DYNAMIC HISTORICO ---")
     threading.Thread(target=tx_worker, daemon=True).start()
-    
-    # Limpa o banco de dados antes de começar
     clear_database()
     
-    sheet = None
+    sheet_rtd = None
     sent_trades_buffer = set()
     last_price_sent = 0
     last_variation_sent = -999
+    historical_loaded = False
     
     while True:
         try:
-            # MODO STANDBY: Só trabalha se o motor estiver ON no gráfico
             if not is_active:
+                historical_loaded = False
                 time.sleep(1)
                 continue
 
-            if not sheet:
-                sheet = get_excel_app()
-                if not sheet:
+            if not historical_loaded:
+                read_historical_data(sent_trades_buffer)
+                historical_loaded = True
+
+            if not sheet_rtd:
+                sheet_rtd = get_sheet(SHEET_RTD)
+                if not sheet_rtd:
                     time.sleep(2)
                     continue
-                print("Conectado ao Excel. Iniciando leitura...")
+                print(f"Conectado à aba {SHEET_RTD}. Iniciando Tempo Real...")
 
-            # Leitura do bloco de dados
-            data = sheet.range("A2:J507").value
+            # O RTD continua na lógica antiga de duas colunas (comum em RTDs de fluxo)
+            data = sheet_rtd.range("A2:J507").value
             if not data or not data[0]:
                 time.sleep(0.1)
                 continue
@@ -138,10 +191,10 @@ def main():
             counters = {}
 
             for row in trade_rows:
-                # COMPRA
+                # COMPRA (A, B, C no RTD)
                 if row[0] and row[1] and row[2]:
                     ts, time_str = process_time(row[0], now)
-                    if ts:
+                    if ts and ts >= last_historical_ts:
                         price, qty = float(row[1]), int(row[2])
                         sig = f"BUY_{time_str}_{price}_{qty}"
                         counters[sig] = counters.get(sig, 0) + 1
@@ -149,10 +202,10 @@ def main():
                         if uid not in sent_trades_buffer:
                             new_trades.append({"id": uid, "timestamp": ts, "price": price, "quantity": qty, "side": "BUY"})
                             sent_trades_buffer.add(uid)
-                # VENDA
+                # VENDA (G, H, I no RTD)
                 if row[6] and row[7] and row[8]:
                     ts, time_str = process_time(row[6], now)
-                    if ts:
+                    if ts and ts >= last_historical_ts:
                         price, qty = float(row[7]), int(row[8])
                         sig = f"SELL_{time_str}_{price}_{qty}"
                         counters[sig] = counters.get(sig, 0) + 1
@@ -161,8 +214,8 @@ def main():
                             new_trades.append({"id": uid, "timestamp": ts, "price": price, "quantity": qty, "side": "SELL"})
                             sent_trades_buffer.add(uid)
 
-            if len(sent_trades_buffer) > 15000:
-                sent_trades_buffer = set(list(sent_trades_buffer)[-5000:])
+            if len(sent_trades_buffer) > 35000:
+                sent_trades_buffer = set(list(sent_trades_buffer)[-15000:])
 
             p_changed = abs(current_price - last_price_sent) > 0.0001
             v_changed = abs(current_variation - last_variation_sent) > 0.0001
@@ -175,7 +228,7 @@ def main():
             time.sleep(SCAN_INTERVAL)
         except Exception as e:
             print(f"[LOOP ERROR]: {e}")
-            sheet = None
+            sheet_rtd = None
             time.sleep(1)
 
 if __name__ == "__main__":

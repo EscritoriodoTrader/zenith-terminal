@@ -831,7 +831,7 @@ function connectMotor() {
     if (statusIcon) statusIcon.style.color = '#ff9800'; 
     
     socket.onopen = () => { 
-        console.log("Conectado ao Servidor Zenith (Porta 3000)"); 
+        console.log("Conectado ao Servidor Zenith (Nuvem)"); 
         updateMotorUI(); 
     };
 

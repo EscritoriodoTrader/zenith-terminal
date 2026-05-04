@@ -820,10 +820,10 @@ function connectMotor() {
 
     if (socket) socket.close();
     
-    // Detecta automaticamente o protocolo e o host
-    const isHttps = window.location.protocol === 'https:';
-    const protocol = isHttps ? 'wss:' : 'ws:';
-    const host = window.location.host; // Na nuvem, o host não inclui porta. No local, inclui :3000.
+    // Força WSS na nuvem (Render) e WS no local
+    const isLocal = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+    const protocol = isLocal ? 'ws:' : 'wss:';
+    const host = window.location.host; 
     
     socket = new WebSocket(`${protocol}//${host}`);
     
@@ -831,7 +831,7 @@ function connectMotor() {
     if (statusIcon) statusIcon.style.color = '#ff9800'; 
     
     socket.onopen = () => { 
-        console.log("Conectado ao Servidor Zenith (Nuvem)"); 
+        console.log("ZENITH CLOUD: Conectado via WSS Seguro"); 
         updateMotorUI(); 
     };
 

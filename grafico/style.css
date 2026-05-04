@@ -2,7 +2,7 @@
 * { margin: 0; padding: 0; box-sizing: border-box; }
 
 :root {
-    --theme-bg: #1c2027; /* VARIÁVEL DO TEMA (PASSO 7 REFINAMENTO) */
+    --theme-bg: #0a192f; /* AZUL ESCURO PARA TESTE DE ATUALIZAÇÃO */
 }
 
 body { 

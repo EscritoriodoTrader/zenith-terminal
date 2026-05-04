@@ -819,9 +819,12 @@ window.addEventListener('keydown', (e) => {
 function connectMotor() {
 
     if (socket) socket.close();
-    // Usa o host atual (local ou nuvem) automaticamente
-    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-    const host = window.location.host;
+    
+    // Detecta automaticamente o protocolo e o host
+    const isHttps = window.location.protocol === 'https:';
+    const protocol = isHttps ? 'wss:' : 'ws:';
+    const host = window.location.host; // Na nuvem, o host não inclui porta. No local, inclui :3000.
+    
     socket = new WebSocket(`${protocol}//${host}`);
     
     const statusIcon = document.getElementById('conn-status');

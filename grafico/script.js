@@ -819,7 +819,10 @@ window.addEventListener('keydown', (e) => {
 function connectMotor() {
 
     if (socket) socket.close();
-    socket = new WebSocket(`ws://${window.location.hostname || '127.0.0.1'}:3000`);
+    // Usa o host atual (local ou nuvem) automaticamente
+    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+    const host = window.location.host;
+    socket = new WebSocket(`${protocol}//${host}`);
     
     const statusIcon = document.getElementById('conn-status');
     if (statusIcon) statusIcon.style.color = '#ff9800'; 

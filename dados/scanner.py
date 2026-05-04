@@ -10,7 +10,9 @@ import queue
 # ==========================================
 EXCEL_FILE_NAME = "Fluxo.xlsm"
 SHEET_NAME = "Dados_RTD"
-SERVER_URL = "http://localhost:3000/api/trades"
+# URL do servidor Node.js
+SERVER_URL = "https://zenith-terminal-bvj4.onrender.com"
+POST_URL = f"{SERVER_URL}/api/trades"
 SCAN_INTERVAL = 0.005 # 5ms para alta frequência
 
 # Fila de transmissão e Sincronização

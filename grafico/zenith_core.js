@@ -43,8 +43,14 @@ let footprintFontColor = getStorage('zenith_footprint_font', '#ffffff');
 
 
 
-catch(e) { filters = [{ balance: 100, color: '#ffd700', opacity: 80 }]; }
-let rawTrades = []; // Cache de trades brutos para re-agregação ultra-rápida
+let filters = [];
+try { 
+    filters = JSON.parse(localStorage.getItem('zenith_filters')) || [{ balance: 100, color: '#ffd700', opacity: 80 }]; 
+} catch(e) { 
+    filters = [{ balance: 100, color: '#ffd700', opacity: 80 }]; 
+}
+
+let rawTrades = []; 
 let processedTradeIds = new Set();
 let tempSettings = {}; 
 let motorStatus = getStorage('zenith_motor', 'off');
@@ -123,7 +129,6 @@ let activeTool = 'none', mousePos = { x: 0, y: 0 }, isDrag = false, isDragS = fa
 
 let chartData = [];
 let chartDataMap = new Map(); // O(1) Lookup
-let processedTradeIds = new Set(); // Evitar duplicatas no volume
 let hasRealData = false;
 let needsHistoryRedraw = true;
 let externalLastPrice = 0;

@@ -1,0 +1,166 @@
+# PLANO DE CONSTRUÇÃO - GRÁFICO ZENITH (PASSO A PASSO)
+
+Este documento registra a evolução do gráfico e explica cada parte técnica.
+
+----------------------------------------------------------------------
+ESTRUTURA DE ARQUIVOS USADA:
+1. index.html: Define o "corpo" da página.
+2. style.css: Define o visual (cores, tamanhos, fontes).
+3. script.js: É o motor de desenho (Canvas) e lógica de dados.
+
+----------------------------------------------------------------------
+PASSO 1: FUNDO LIMPO (V1.0)
+Objetivo: Iniciar o gráfico apenas com a cor de fundo institucional.
+
+LOCALIZAÇÃO NO CÓDIGO:
+- script.js: Linhas 1 a 21.
+
+EXPLICAÇÃO TÉCNICA (script.js):
+- 'canvas.width = canvas.clientWidth' (Linha 6): Garante que o gráfico respeite o espaço sobrando abaixo da aba, sem cobri-la.
+
+Status: CONCLUÍDO
+
+----------------------------------------------------------------------
+PASSO 2: ABA PRINCIPAL E MOTOR (V1.1)
+Objetivo: Criar a barra superior com pílula de ativo e botão do motor.
+
+LOCALIZAÇÃO NO CÓDIGO:
+- index.html: Linhas 10 a 23 (Pílula e Botão Power).
+- style.css: Linhas 19 a 86 (Estilo pílula e cores do motor).
+- script.js: Linhas 130 a 141 (Lógica ON/OFF do motor).
+
+EXPLICAÇÃO TÉCNICA:
+- '.motor-btn' (style.css): Botão de energia à direita.
+- '.on' / '.off': Cores Verde (Ligado) e Vermelho (Desligado).
+- 'localStorage': Salva o estado do motor no navegador.
+- 'Dependência de Tema': A cor de fundo da barra superior é definida pelo Tema Global (Passo 7).
+
+
+Status: CONCLUÍDO (Motor Restaurado e Conectado)
+
+
+----------------------------------------------------------------------
+PASSO 3: EXIBIÇÃO DE DADOS EM TEMPO REAL (V1.2)
+Objetivo: Exibir a variação vinda direto do motor (Excel/Python).
+
+LOCALIZAÇÃO NO CÓDIGO:
+- script.js: Funções updateDisplay.
+
+Status: CONCLUÍDO (Fix Variação Positiva Restaurado)
+
+
+----------------------------------------------------------------------
+PASSO 4: DINÂMICA DE TEMPO GRÁFICO (V1.3)
+Objetivo: Atualizar e persistir o tempo gráfico (ex: 5Min para 2Min).
+
+LOCALIZAÇÃO NO CÓDIGO:
+- script.js: Funções updateTimeframe e localStorage.
+
+Status: CONCLUÍDO
+
+----------------------------------------------------------------------
+PASSO 5: SISTEMA DE LUPA (ESTILO BARRA TRADICIONAL) (V1.4)
+Objetivo: Busca de tempo em formato de barra horizontal compacta.
+
+LOCALIZAÇÃO NO CÓDIGO:
+- index.html: Linhas 50 a 60 (Barra de pesquisa).
+- style.css: Linhas 112 a 153 (Visual compacto e blur).
+
+Status: CONCLUÍDO
+
+----------------------------------------------------------------------
+PASSO 6: BARRA DE FERRAMENTAS E INTERATIVIDADE (V2.35)
+Objetivo: Ferramentas funcionais com labels dinâmicos e navegação.
+
+LOCALIZAÇÃO NO CÓDIGO:
+- index.html: Linhas 30 a 38 (HTML das Ferramentas).
+- style.css: Linhas 183 a 229 (Visual da barra flutuante).
+- script.js: Linhas 80 a 160 (Lógica de Cruz, Mão, Zoom e Labels).
+
+EXPLICAÇÃO TÉCNICA:
+- 'Ferramenta Mão (Panning)': Permite arrastar o gráfico horizontalmente (timeOffset).
+- 'Crosshair Labels': Etiquetas dinâmicas no preço (formato seta) e tempo durante o uso da Cruz.
+- 'Zoom Global': Mouse wheel sincronizado para eixos X e Y.
+
+Status: CONCLUÍDO
+
+----------------------------------------------------------------------
+PASSO 7: PAINEL DE CONFIGURAÇÕES (V2.31)
+Objetivo: Controle total de Aparência, Tema e Tipografia.
+
+LOCALIZAÇÃO NO CÓDIGO:
+- index.html: Linhas 78 a 125 (Modal de Configurações).
+- style.css: Linhas 232 a 345 (Glassmorphism), 524+ (Inputs).
+- script.js: Linhas 225 a 300 (Persistência e Temas).
+
+EXPLICAÇÃO TÉCNICA:
+- 'Glassmorphism': Fundo translúcido com blur de 20px.
+- 'Tema Global': Uma única cor controla o fundo da Aba Principal (Passo 2), a Barra de Data (Passo 9) e o Corner Box (Passo 9).
+- 'Aparência do Footprint': Organização em 2 colunas com controle total de Saldos, Contornos, Quantidades (Fundo e Fonte) e Preço Atual.
+- 'Filtros Dinâmicos (Cards)': Interface em cards com 3 colunas (Quantidade, Cor, Opacidade) e seletores de cor premium (Pretty UI) para consistência visual.
+
+- 'Interface Clean': Barra de rolagem do modal oculta para um visual mais integrado.
+
+- 'Persistência Total': Todas as configurações (Geral, Aparência e Filtros) são salvas via `localStorage` e restauradas automaticamente ao abrir o painel ou recarregar a página (F5).
+- 'Mecanismo de Confirmação': Alterações de cores/fontes usam staging (tempSettings), enquanto filtros salvam instantaneamente para feedback imediato.
+
+
+
+Status: CONCLUÍDO
+
+----------------------------------------------------------------------
+PASSO 8: ESCALA DE PREÇO (V2.22)
+Objetivo: Régua vertical interativa para S&P 500.
+
+LOCALIZAÇÃO NO CÓDIGO:
+- script.js: Lógica de PriceFormatter e Vertical Drag.
+
+Status: CONCLUÍDO (Nice Steps 0.25+ Ativo)
+
+
+----------------------------------------------------------------------
+PASSO 9: ESCALA DE TEMPO (EIXO X) (V2.34)
+Objetivo: Cronologia horizontal ancorada e com respiro lateral.
+
+LOCALIZAÇÃO NO CÓDIGO:
+- script.js: Bloqueio de tempo futuro e Margem de 50px (rightMargin).
+
+EXPLICAÇÃO TÉCNICA:
+- 'Sem Futuro': O gráfico trava no horário atual, impedindo navegação para o vazio.
+- 'Margem de Respiro': 50px de espaço à direita para evitar sobreposição com a escala de preço.
+- 'Dependência de Tema': A barra inferior é dividida em duas faixas: a superior (Horários) segue a cor do gráfico, e a inferior (Data) segue o Tema Global.
+- 'Abertura do Candle': As etiquetas de tempo (HH:MM) são centralizadas com cada candle, marcando o início do período de forma simétrica.
+
+- 'Crosshair Time Label': O fundo do rótulo de horário da cruz acompanha automaticamente a cor de fundo do gráfico.
+- 'Sincronização de Timeframe': A escala de tempo adapta-se automaticamente ao tempo gráfico selecionado (ex: 5Min, 1H), com arredondamento para intervalos cheios (00, 05, 10...) para manter a clareza institucional.
+
+
+
+- 'Zoom Interativo': Arrastar a escala de tempo horizontalmente permite ajustar o zoom (quantidade de candles visíveis), espelhando o comportamento da escala de preço.
+
+
+
+
+
+Status: CONCLUÍDO
+
+----------------------------------------------------------------------
+PASSO 10: CANDLES FOOTPRINT (V2.56)
+Objetivo: Sincronização em tempo real da escala de preço.
+
+LOCALIZAÇÃO NO CÓDIGO:
+- script.js: Chamada de autoScale() dentro da função draw().
+
+EXPLICAÇÃO TÉCNICA:
+- 'Escala Dinâmica Total': Integrei o sistema de Auto-Scale diretamente no loop de renderização (60 FPS). Agora, conforme você arrasta o gráfico para os lados ou dá zoom, a escala de preço (Y) se ajusta instantaneamente para enquadrar os candles visíveis.
+- 'Sincronização de Movimento': A escala lateral agora "segue" o movimento do gráfico. Se o preço sobe e sai da tela, a escala se move junto para mantê-lo visível, eliminando o descompasso entre o gráfico e os números laterais.
+- 'Prioridade de Visualização': O sistema garante que a escala de preço seja sempre o reflexo exato do que está acontecendo na área de desenho principal.
+- 'Afastamento Vertical (Gap)': Implementei um espaçamento de 2 pixels entre as caixas de fundo do footprint.
+- 'Refinamento Estético': Destaques de filtro agora funcionam como barras de fundo para os números de Saldo, posicionados por baixo do texto para garantir legibilidade e estilo (similar às barras de volume).
+
+
+- 'Nitidez de Destaque': Adicionei um efeito de sombra projetada preta nos números de saldo quando filtrados.
+- 'Barras de Volume Sólidas': Opacidade aumentada para 100% para máxima visibilidade contra qualquer cor de fundo.
+
+
+Status: CONCLUÍDO

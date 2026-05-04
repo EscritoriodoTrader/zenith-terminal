@@ -1020,6 +1020,9 @@ function updateMotorUI() {
 
 document.getElementById('motor-toggle').onclick = () => {
     const newStatus = motorStatus === 'on' ? 'off' : 'on';
+    motorStatus = newStatus; // Muda localmente na hora
+    updateMotorUI(); // Atualiza a cor na hora
+    
     if (socket && socket.readyState === WebSocket.OPEN) {
         socket.send(JSON.stringify({ type: 'TOGGLE_MOTOR' }));
     } else if (newStatus === 'on') {

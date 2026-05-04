@@ -43,10 +43,10 @@ let footprintFontColor = getStorage('zenith_footprint_font', '#ffffff');
 
 
 
-let filters = [];
-try { filters = JSON.parse(localStorage.getItem('zenith_filters')) || [{ balance: 100, color: '#ffd700', opacity: 80 }]; }
 catch(e) { filters = [{ balance: 100, color: '#ffd700', opacity: 80 }]; }
-let tempSettings = {}; // Memória temporária para o Passo 7
+let rawTrades = []; // Cache de trades brutos para re-agregação ultra-rápida
+let processedTradeIds = new Set();
+let tempSettings = {}; 
 let motorStatus = getStorage('zenith_motor', 'off');
 let socket;
 
@@ -723,17 +723,13 @@ if (searchInput) {
                 document.getElementById('tf-display').innerText = currentTimeframe.toUpperCase();
                 localStorage.setItem('zenith_timeframe', currentTimeframe); 
                 
-                // Limpa e pede novo histórico para reagregar no novo tempo
-                chartData = [];
-                chartDataMap.clear();
-                processedTradeIds.clear();
-                needsHistoryRedraw = true;
-                needsScaleRedraw = true;
-                if (socket && socket.readyState === WebSocket.OPEN) {
-                    socket.send(JSON.stringify({ type: 'GET_HISTORY' }));
-                }
-                autoScale();
+                // RE-AGREGAÇÃO ULTRA-RÁPIDA (SEM INTERNET)
+                reaggregateChart();
+                
+                searchOverlay.classList.remove('active'); 
+                searchInput.value = '';
                 saveSettingsToServer();
+                return;
             }
             searchOverlay.classList.remove('active'); searchInput.value = '';
 
@@ -944,14 +940,11 @@ function processTrades(trades) {
     let addedNewCandle = false;
 
     trades.forEach(t => {
-        // Pula se o trade já foi processado para evitar duplicidade de volume
-        if (processedTradeIds.has(t.id)) return;
+        if (!t.id || processedTradeIds.has(t.id)) return;
         processedTradeIds.add(t.id);
+        rawTrades.push(t); // Salva no cache bruto
 
-        const time = t.timestamp;
-        const candleTime = Math.floor(time / tfMs) * tfMs;
-        
-        // BUSCA O(1) VIA MAP
+        const candleTime = Math.floor(t.timestamp / tfMs) * tfMs;
         let candle = chartDataMap.get(candleTime);
         
         if (!candle) {
@@ -965,30 +958,41 @@ function processTrades(trades) {
             addedNewCandle = true;
         }
 
-        // Atualiza OHLC
         candle.close = t.price;
         if (t.price > candle.high) candle.high = t.price;
         if (t.price < candle.low) candle.low = t.price;
 
-        // Atualiza Footprint
         const pS = t.price.toFixed(2);
         if (!candle.ticks[pS]) candle.ticks[pS] = { buy: 0, sell: 0, p: t.price };
         if (t.side.toUpperCase() === 'BUY') candle.ticks[pS].buy += t.quantity;
         else candle.ticks[pS].sell += t.quantity;
 
-        // Atualização Incremental do Volume Máximo (Ultra-Rápido)
         const totalV = candle.ticks[pS].buy + candle.ticks[pS].sell;
         if (totalV > (candle.maxV || 0)) candle.maxV = totalV;
     });
 
-    // Ordenar e atualizar cache APENAS se uma nova vela entrou no histórico
     if (addedNewCandle) {
         chartData.sort((a, b) => b.timestamp - a.timestamp);
-        
-        // Força o redesenho total do histórico para deslocar os candles corretamente
         needsHistoryRedraw = true;
         needsScaleRedraw = true;
     }
+}
+
+// Função de RE-AGREGAÇÃO ULTRA-RÁPIDA (Local)
+function reaggregateChart() {
+    console.log("🚀 Re-agregando gráfico para", currentTimeframe);
+    chartData = [];
+    chartDataMap.clear();
+    const currentProcessedIds = new Set(processedTradeIds); // Backup
+    processedTradeIds.clear(); // Limpa para re-processar
+    
+    // Processa tudo da memória RAM (sem rede)
+    const backupRaw = [...rawTrades];
+    rawTrades = [];
+    processTrades(backupRaw);
+    
+    autoScale();
+    draw();
 }
 
 

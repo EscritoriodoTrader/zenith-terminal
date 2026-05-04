@@ -9,7 +9,15 @@ const db = require('./database');
 
 const app = express();
 app.use(express.json({ limit: '10mb' }));
-app.use(express.static(path.join(__dirname, '..', 'grafico')));
+app.use(express.static(path.join(__dirname, '..', 'grafico'), {
+    setHeaders: (res, path) => {
+        if (path.endsWith('.html')) {
+            res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+            res.setHeader('Pragma', 'no-cache');
+            res.setHeader('Expires', '0');
+        }
+    }
+}));
 
 const server = http.createServer(app);
 const wss = new WebSocket.Server({ server });

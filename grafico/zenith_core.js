@@ -999,11 +999,15 @@ function updateMotorUI() {
     const statusIcon = document.getElementById('conn-status');
     if (!btn) return;
     
-    // Botão de Cima: Status do Motor (Processamento)
+    // 1. ATUALIZAÇÃO DO BOTÃO PRINCIPAL (MOTOR)
     if (motorStatus === 'on') {
-        btn.classList.add('on'); btn.classList.remove('off');
+        btn.classList.add('on');
+        btn.classList.remove('off');
+        console.log("🎨 UI: Botão Motor -> VERDE");
     } else {
-        btn.classList.add('off'); btn.classList.remove('on');
+        btn.classList.add('off');
+        btn.classList.remove('on');
+        console.log("🎨 UI: Botão Motor -> VERMELHO");
     }
 
     // Ícone de Baixo: Status do Terminal (Conexão com Servidor)
@@ -1029,6 +1033,9 @@ if (motorBtn) {
         // Atualização Visual Instantânea
         motorStatus = newStatus;
         updateMotorUI();
+        setStorage('zenith_motor', motorStatus); // Persiste a escolha
+        
+        console.log("🚀 Ação: Alterando motor para", newStatus);
         
         // Comunicação com o Servidor
         if (socket && socket.readyState === WebSocket.OPEN) {

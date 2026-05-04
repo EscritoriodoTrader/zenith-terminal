@@ -1023,37 +1023,24 @@ function updateMotorUI() {
 
 
 
-// LÓGICA DE CLIQUE DO MOTOR (UNIFICADA)
-const motorBtn = document.getElementById('motor-toggle');
-if (motorBtn) {
-    motorBtn.addEventListener('click', () => {
-        console.log("⚡ Clique no Motor detectado!");
+// LÓGICA DE CLIQUE GLOBAL (À PROVA DE FALHAS)
+document.addEventListener('click', (e) => {
+    const btn = e.target.closest('#motor-toggle');
+    if (btn) {
+        console.log("⚡ CLIQUE GLOBAL DETECTADO NO MOTOR!");
         const newStatus = (motorStatus === 'on') ? 'off' : 'on';
         
-        // Atualização Visual Instantânea
         motorStatus = newStatus;
         updateMotorUI();
-        setStorage('zenith_motor', motorStatus); // Persiste a escolha
+        setStorage('zenith_motor', motorStatus);
         
-        console.log("🚀 Ação: Alterando motor para", newStatus);
-        
-        // Comunicação com o Servidor
         if (socket && socket.readyState === WebSocket.OPEN) {
             socket.send(JSON.stringify({ type: 'TOGGLE_MOTOR' }));
         } else if (newStatus === 'on') {
             connectMotor();
         }
-        
-        // Limpeza opcional na saída
-        if (newStatus === 'off') {
-            fetch('/api/trades/clear', { method: 'DELETE' })
-                .then(() => console.log("🧹 Sessão encerrada e banco limpo."))
-                .catch(err => console.error("Erro ao limpar na saída:", err));
-        }
-    });
-}
-
-
+    }
+});
 
 // LÓGICA DE DESLIGAMENTO (SAÍDA)
 const connStatus = document.getElementById('conn-status');

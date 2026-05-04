@@ -554,6 +554,7 @@ timeCanvas.onmousedown = (e) => { if (isModalOpen()) return; isDragT = true; lTX
 
 loadSettingsFromServer().then(() => {
     connectMotor();
+    updateMotorUI(); // Garante o visual correto ao carregar
     resize(); draw();
 });
 

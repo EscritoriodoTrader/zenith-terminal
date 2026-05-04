@@ -1019,23 +1019,32 @@ function updateMotorUI() {
 
 
 
-document.getElementById('motor-toggle').onclick = () => {
-    const newStatus = motorStatus === 'on' ? 'off' : 'on';
-    motorStatus = newStatus; // Muda localmente na hora
-    updateMotorUI(); // Atualiza a cor na hora
-    
-    if (socket && socket.readyState === WebSocket.OPEN) {
-        socket.send(JSON.stringify({ type: 'TOGGLE_MOTOR' }));
-    } else if (newStatus === 'on') {
-        connectMotor();
-    }
-    if (newStatus === 'off') {
-        fetch('/api/trades/clear', { method: 'DELETE' })
-            .then(() => console.log("Sessão encerrada e banco limpo."))
-            .catch(err => console.error("Erro ao limpar na saída:", err));
-    }
-    // O motorStatus será atualizado e persistido via mensagem MOTOR_STATUS do servidor
-};
+// LÓGICA DE CLIQUE DO MOTOR (UNIFICADA)
+const motorBtn = document.getElementById('motor-toggle');
+if (motorBtn) {
+    motorBtn.addEventListener('click', () => {
+        console.log("⚡ Clique no Motor detectado!");
+        const newStatus = (motorStatus === 'on') ? 'off' : 'on';
+        
+        // Atualização Visual Instantânea
+        motorStatus = newStatus;
+        updateMotorUI();
+        
+        // Comunicação com o Servidor
+        if (socket && socket.readyState === WebSocket.OPEN) {
+            socket.send(JSON.stringify({ type: 'TOGGLE_MOTOR' }));
+        } else if (newStatus === 'on') {
+            connectMotor();
+        }
+        
+        // Limpeza opcional na saída
+        if (newStatus === 'off') {
+            fetch('/api/trades/clear', { method: 'DELETE' })
+                .then(() => console.log("🧹 Sessão encerrada e banco limpo."))
+                .catch(err => console.error("Erro ao limpar na saída:", err));
+        }
+    });
+}
 
 
 

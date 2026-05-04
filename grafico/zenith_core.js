@@ -838,6 +838,15 @@ function connectMotor() {
     socket.onmessage = (e) => {
         try {
             const msg = JSON.parse(e.data);
+            if (msg.type === 'CLEAR_CHART') {
+                console.log("🧹 Comando de limpeza recebido. Reiniciando gráfico...");
+                chartData = [];
+                chartDataMap.clear();
+                processedTradeIds.clear();
+                needsHistoryRedraw = true;
+                needsScaleRedraw = true;
+                return;
+            }
             if (msg.type === 'HISTORY') {
                 chartData = []; 
                 chartDataMap.clear();
@@ -1016,6 +1025,11 @@ document.getElementById('motor-toggle').onclick = () => {
         socket.send(JSON.stringify({ type: 'TOGGLE_MOTOR' }));
     } else if (newStatus === 'on') {
         connectMotor();
+    }
+    if (newStatus === 'off') {
+        fetch('/api/trades/clear', { method: 'DELETE' })
+            .then(() => console.log("Sessão encerrada e banco limpo."))
+            .catch(err => console.error("Erro ao limpar na saída:", err));
     }
     // O motorStatus será atualizado e persistido via mensagem MOTOR_STATUS do servidor
 };

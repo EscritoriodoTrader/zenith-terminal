@@ -62,6 +62,19 @@ app.post('/api/settings', (req, res) => {
     res.sendStatus(200);
 });
 
+// Endpoint para LIMPAR o banco de dados (Sessão Volátil)
+app.delete('/api/trades/clear', async (req, res) => {
+    try {
+        await pool.query('DELETE FROM trades');
+        broadcast({ type: 'CLEAR_CHART' });
+        console.log("🧹 Banco de dados limpo com sucesso.");
+        res.json({ success: true });
+    } catch (err) {
+        console.error("Erro ao limpar banco:", err);
+        res.status(500).json({ error: "Erro ao limpar banco" });
+    }
+});
+
 // Recebimento de trades do scanner.py
 app.post('/api/trades', async (req, res) => {
     const { trades, last_price, variation } = req.body;

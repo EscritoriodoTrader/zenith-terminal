@@ -76,8 +76,20 @@ def process_time(val, now):
     except:
         return None, None
 
+def clear_database():
+    """Envia um comando para limpar o banco de dados no início da sessão"""
+    try:
+        print("[INIT]: Solicitando limpeza do banco de dados para nova sessão...")
+        requests.delete(f"{SERVER_URL}/api/trades/clear", timeout=5)
+        print("[INIT]: Banco de dados resetado com sucesso.")
+    except Exception as e:
+        print(f"[INIT ERROR]: Falha ao resetar banco: {e}")
+
 def main():
     print("--- ZENITH SCANNER V5.0: XLWINGS ENGINE ---")
+    
+    # Limpa o banco de dados antes de começar a nova sessão
+    clear_database()
     
     sheet = None
     sent_trades_buffer = set()

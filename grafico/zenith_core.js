@@ -339,6 +339,13 @@ function draw() {
         
         if (chartData.length === 0) { 
             drawScales(range);
+            
+            // Mensagem de Status
+            ctx.fillStyle = "rgba(255,255,255,0.5)";
+            ctx.font = "20px Arial";
+            ctx.textAlign = "center";
+            ctx.fillText("Aguardando dados reais do Excel...", (canvas.width/dpr - rightMargin)/2, (canvas.height/dpr)/2);
+            
             requestAnimationFrame(draw); 
             return; 
         }

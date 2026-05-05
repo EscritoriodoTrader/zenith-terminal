@@ -279,22 +279,17 @@ function drawScales(range) {
     scaleCtx.clearRect(0, 0, sW, sH);
     scaleCtx.drawImage(staticScaleCache, 0, 0, sW, sH);
     
-    // DESENHAR ETIQUETA DE PREÇO ATUAL (CHEVRON)
-    if (externalLastPrice > 0) {
-        const y = sH - ((externalLastPrice - priceMin) / (priceMax - priceMin)) * sH;
+    // DESENHAR ETIQUETA DE PREÇO ATUAL (Vindo da C2 ou da última vela)
+    const currentPrice = externalLastPrice || (chartData[0] ? chartData[0].close : 0);
+    if (currentPrice > 0) {
+        const y = sH - ((currentPrice - priceMin) / (priceMax - priceMin)) * sH;
         if (y >= 0 && y <= sH) {
-            drawChevronTag(scaleCtx, y, themeColor, "#000", priceFormatter.format(externalLastPrice), sW);
+            drawChevronTag(scaleCtx, y, themeColor, "#000", priceFormatter.format(currentPrice), sW);
         }
     }
 
     timeCtx.clearRect(0, 0, tW, 35);
     timeCtx.drawImage(staticTimeCache, 0, 0, tW, 35);
-
-    // Camada Dinâmica (Preço Atual e Mira)
-    if (chartData[0] && hasRealData) {
-        const lastP = chartData[0].close, y = sH - ((lastP - priceMin) / range) * sH;
-        drawChevronTag(scaleCtx, y, lastPriceBgColor, "#000000", priceFormatter.format(lastP), sW);
-    }
 
     if (activeTool === 'cross') {
         const y = mousePos.y, p = priceMax - (y / (canvas.height / dpr)) * range;

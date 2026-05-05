@@ -56,10 +56,15 @@ def tx_worker():
             payload = tx_queue.get()
             if payload is None: break
             try:
-                session.post(POST_URL, json=payload, timeout=0.5)
-            except: pass
+                # Aumentado timeout para 10s para aguentar o Render
+                resp = session.post(POST_URL, json=payload, timeout=10)
+                if resp.status_code != 200:
+                    print(f"[TX ERROR]: Servidor recusou dados (Status {resp.status_code})")
+            except Exception as e:
+                print(f"[TX ERROR]: Falha ao postar dados: {e}")
             tx_queue.task_done()
-        except: pass
+        except Exception as e:
+            print(f"[TX FATAL]: {e}")
 
 def clear_database():
     try:

@@ -79,6 +79,15 @@ wss.on('connection', async (ws) => {
     ws.on('message', async (msg) => {
         try {
             const cmd = JSON.parse(msg);
+            
+            // RECEBIMENTO DE TRADES VIA WEBSOCKET (ALTA PERFORMANCE)
+            if (cmd.type === 'NEW_TRADES' && cmd.data) {
+                broadcast({ type: 'NEW_TRADES', data: cmd.data });
+                if (cmd.last_price) {
+                    broadcast({ type: 'MARKET_DATA', lastPrice: cmd.last_price, variation: 0 });
+                }
+            }
+
             if (cmd.type === 'TOGGLE_MOTOR') {
                 isMotorRunning = !isMotorRunning;
                 broadcast({ type: 'MOTOR_STATUS', running: isMotorRunning });

@@ -23,24 +23,26 @@ session = requests.Session()
 is_active = False 
 last_historical_ts = 0 
 
+ws_client = None
+
 def on_message(ws, message):
-    global is_active
+    global is_active, ws_client
+    ws_client = ws
     try:
-        data = json.loads(message)
-        if data.get('type') == 'MOTOR_STATUS':
-            is_active = data.get('running', False)
-            status_str = "ATIVO" if is_active else "STANDBY"
-            print(f"[STATUS]: Motor {status_str}")
+        msg = json.loads(message)
+        if msg.get('type') == 'MOTOR_STATUS':
+            is_active = msg.get('running', False)
     except: pass
 
 def start_ws():
     def run():
+        global ws_client
         print(f"[WS]: Iniciando conexão com o servidor em {SERVER_HOST}...")
         while True:
             try:
                 ws_url = f"wss://{SERVER_HOST}"
                 ws = websocket.WebSocketApp(ws_url, on_message=on_message)
-                print(f"[WS]: Tentando abrir túnel de dados...")
+                print(f"[WS]: Túnel de dados aberto.")
                 ws.run_forever()
             except Exception as e:
                 print(f"[WS]: Erro na conexão: {e}")
@@ -55,16 +57,27 @@ def tx_worker():
         try:
             payload = tx_queue.get()
             if payload is None: break
-            try:
-                # Aumentado timeout para 10s para aguentar o Render
-                resp = session.post(POST_URL, json=payload, timeout=10)
-                if resp.status_code != 200:
-                    print(f"[TX ERROR]: Servidor recusou dados (Status {resp.status_code})")
-            except Exception as e:
-                print(f"[TX ERROR]: Falha ao postar dados: {e}")
+            
+            # TENTA ENVIAR VIA WEBSOCKET (MUITO MAIS RÁPIDO)
+            sent_ws = False
+            if ws_client and ws_client.sock and ws_client.sock.connected:
+                try:
+                    ws_client.send(json.dumps({
+                        "type": "NEW_TRADES",
+                        "data": payload.get("trades", []),
+                        "last_price": payload.get("last_price")
+                    }))
+                    sent_ws = True
+                except: pass
+            
+            # SE O WS FALHAR, USA O HTTP COMO BACKUP
+            if not sent_ws:
+                try:
+                    session.post(POST_URL, json=payload, timeout=3)
+                except: pass
+                
             tx_queue.task_done()
-        except Exception as e:
-            print(f"[TX FATAL]: {e}")
+        except: pass
 
 def clear_database():
     try:

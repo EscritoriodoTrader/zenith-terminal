@@ -285,24 +285,14 @@ function drawScales(range) {
     if (currentPrice > 0) {
         const y = sH - ((currentPrice - priceMin) / safeRange) * sH;
         if (y >= 0 && y <= sH) {
-            // Agora usa a cor configurada "Fundo Preço Atual" e cor de fonte branca para contraste
-            drawChevronTag(scaleCtx, y, lastPriceBgColor, "#ffffff", priceFormatter.format(currentPrice), sW);
+            // Fundo Laranja e Texto PRETO (Igual ao seu modelo)
+            drawChevronTag(scaleCtx, y, lastPriceBgColor, "#000000", priceFormatter.format(currentPrice), sW);
         }
     }
 
     timeCtx.clearRect(0, 0, tW, 35);
     timeCtx.drawImage(staticTimeCache, 0, 0, tW, 35);
 
-    // LINHA DE PREÇO ATUAL INFINITA (Estilo TradingView)
-    if (currentPrice > 0) {
-        const y = sH - ((currentPrice - priceMin) / safeRange) * sH;
-        ctx.save();
-        ctx.setLineDash([5, 5]);
-        ctx.strokeStyle = themeColor; 
-        ctx.lineWidth = 1;
-        ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(canvas.width, y); ctx.stroke();
-        ctx.restore();
-    }
 
     if (activeTool === 'cross') {
         const y = mousePos.y, p = priceMax - (y / (canvas.height / dpr)) * range;

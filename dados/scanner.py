@@ -219,10 +219,11 @@ def main():
                 time.sleep(0.1)
                 continue
 
-            # Preço atual pegamos da primeira linha de Compra ou Venda
-            current_price = 0
-            if data[0][1]: current_price = clean_price(data[0][1])
-            elif data[0][7]: current_price = clean_price(data[0][7])
+            # Preço atual pegamos da célula C2 (como solicitado)
+            try:
+                current_price = clean_price(sheet_rtd.range("C2").value)
+            except:
+                current_price = 0
             
             now = datetime.datetime.now()
             new_trades = []

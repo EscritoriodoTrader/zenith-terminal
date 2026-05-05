@@ -78,34 +78,27 @@ def get_sheet(name):
 
 def process_time(val, now):
     try:
-        # Pega apenas a Hora, Minuto e Segundo, ignorando qualquer data do Excel
+        ms = 0
         if isinstance(val, datetime.datetime):
-            h, m, s = val.hour, val.minute, val.second
+            h, m, s, ms = val.hour, val.minute, val.second, val.microsecond // 1000
         elif isinstance(val, (float, int)):
             seconds = int(val * 86400)
             h, m, s = (seconds // 3600) % 24, (seconds // 60) % 60, seconds % 60
         else:
-            val_str = str(val).replace(',', '.') # Transforma "00:00:00,00" em "00:00:00.00"
-            time_part = val_str.split(' ')[-1] if ' ' in val_str else val_str
-            parts = time_part.split(':')
-            h = int(parts[0])
-            m = int(parts[1])
-            # Trata o segundo com milissegundos (ex: 00.00)
-            s_full = float(parts[2])
-            s = int(s_full)
-            ms = int((s_full - s) * 1000)
-        
-        # FORÇA A DATA PARA HOJE
-        dt = now.replace(hour=h, minute=m, second=s, microsecond=ms * 1000)
-        
-        # Se a hora for muito no futuro (ex: Excel marca 23:00 e agora é 01:00 da manhã),
-        # aí sim assumimos que é o dia anterior (final da noite passada).
-        if dt > now + datetime.timedelta(hours=4): 
-            dt -= datetime.timedelta(days=1)
+            v_str = str(val).replace(',', '.')
+            time_part = v_str.split(' ')[-1] if ' ' in v_str else v_str
+            # Trata Milissegundos
+            if '.' in time_part:
+                time_part, ms_str = time_part.split('.')
+                ms = int(ms_str[:3].ljust(3, '0'))
+            
+            p = time_part.split(':')
+            h, m, s = int(p[0]), int(p[1]), int(p[2])
 
+        dt = now.replace(hour=h, minute=m, second=s, microsecond=ms * 1000)
+        if dt > now + datetime.timedelta(hours=4): dt -= datetime.timedelta(days=1)
         return int(dt.timestamp() * 1000), dt.strftime('%H:%M:%S')
-    except:
-        return None, None
+    except: return None, None
 
 def read_historical_data(sent_buffer):
     """Lê a aba Histórico para carregar o passado"""
@@ -227,10 +220,14 @@ def main():
             if len(sent_trades_buffer) > 40000:
                 sent_trades_buffer = set(list(sent_trades_buffer)[-20000:])
 
-            if new_trades or abs(current_price - last_price_sent) > 0.001:
-                if new_trades: new_trades.sort(key=lambda x: x['timestamp'])
+            if new_trades:
+                print(f"[{datetime.datetime.now().strftime('%H:%M:%S')}] >>> ENVIANDO {len(new_trades)} TRADES AO SERVIDOR <<<")
+                new_trades.sort(key=lambda x: x['timestamp'])
                 tx_queue.put({"trades": new_trades, "last_price": current_price, "variation": 0})
                 last_price_sent = current_price
+            else:
+                # Log de batimento cardíaco (opcional, para saber que está vivo)
+                pass
 
             time.sleep(SCAN_INTERVAL)
         except Exception as e:

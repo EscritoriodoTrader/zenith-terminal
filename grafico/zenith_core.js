@@ -144,25 +144,10 @@ const staticTimeCache = document.createElement('canvas');
 const staticTimeCtx = staticTimeCache.getContext('2d');
 
 function generateMockData() {
-    if (hasRealData) return; // Se já temos dados reais, não gera mock
-
-    chartData = []; let base = 5000;
-
-    let tfMin = parseInt(currentTimeframe) || 1;
-    if (currentTimeframe.toUpperCase().includes('H')) tfMin *= 60;
-    if (currentTimeframe.toUpperCase().includes('D')) tfMin *= 1440;
-    
-    const msPerTf = tfMin * 60000;
-    const now = new Date(Math.floor(Date.now() / msPerTf) * msPerTf);
-
-    for (let i = 0; i < 300; i++) {
-        const t = new Date(now.getTime() - i * msPerTf), o = base, c = base + (Math.random() - 0.5) * 6, h = Math.max(o, c) + Math.random() * 3, l = Math.min(o, c) - Math.random() * 3, ticks = {};
-
-
-        for (let p = Math.floor(l / 0.25) * 0.25; p <= h; p = parseFloat((p + 0.25).toFixed(2))) ticks[p.toFixed(2)] = { buy: Math.floor(Math.random() * 200), sell: Math.floor(Math.random() * 200) };
-        chartData.push({ timestamp: t, open: o, high: h, low: l, close: c, ticks });
-        base = c;
-    }
+    // DESATIVADO: Agora o gráfico só mostra dados REAIS vindos do seu Excel.
+    console.log("🕯️ Aguardando conexão com o motor para carregar dados reais...");
+    chartData = [];
+    chartDataMap.clear();
 }
 
 // 5. LÓGICA DE DIMENSIONAMENTO
@@ -1043,20 +1028,27 @@ if (connStatus) {
 const toolClear = document.getElementById('tool-clear');
 if (toolClear) {
     toolClear.onclick = () => {
-        if (!confirm("Deseja realmente LIMPAR todos os dados do gráfico e do banco de dados?")) return;
+        if (!confirm("Deseja realmente LIMPAR tudo? Isso vai resetar o navegador e o banco de dados.")) return;
         
-        console.log("🗑️ Iniciando Limpeza Manual...");
+        console.log("🗑️ LIMPANDO TUDO (HARD RESET)...");
         // 1. Limpa Memória Local
         chartData = []; chartDataMap.clear(); processedTradeIds.clear(); rawTrades = [];
-        // 2. Limpa Imagem
+        
+        // 2. Limpa Cache Visual
         historyCanvasCache.width = historyCanvasCache.width;
         needsHistoryRedraw = true;
         autoScale();
         draw();
         
-        // 3. Limpa Banco de Dados Remoto
+        // 3. Limpa LocalStorage (Zera as configurações também para garantir)
+        localStorage.clear();
+        
+        // 4. Limpa Banco de Dados Remoto
         fetch('/api/trades/clear', { method: 'DELETE' })
-            .then(() => alert("Gráfico e Banco de Dados Limpos!"))
+            .then(() => {
+                alert("SISTEMA RESETADO! A página será recarregada para garantir limpeza total.");
+                window.location.reload();
+            })
             .catch(err => console.error("Erro ao limpar:", err));
     };
 }

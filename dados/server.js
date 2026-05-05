@@ -52,20 +52,22 @@ app.delete('/api/trades/clear', async (req, res) => {
     res.sendStatus(200);
 });
 
-app.post('/api/trades', async (req, res) => {
+app.post('/api/trades', (req, res) => {
     const { trades, last_price } = req.body;
+    
+    // 1. Responde IMEDIATAMENTE para o Python não travar
+    res.status(200).send("OK");
+
+    // 2. Processa o resto em "background" (segundo plano)
     if (trades && trades.length > 0) {
-        console.log(`[AUDIT]: Recebidos ${trades.length} trades. Exemplo ID: ${trades[0].id}`);
+        console.log(`[AUDIT]: Recebidos ${trades.length} trades.`);
         broadcast({ type: 'NEW_TRADES', data: trades });
+        db.insertTrades(trades).catch(e => console.error("[DB ERROR]:", e.message));
     }
     
-    if (!isMotorRunning) return res.status(200).send("OFF");
-    broadcast({ type: 'MARKET_DATA', lastPrice: last_price, variation });
-    if (trades && trades.length > 0) {
-        broadcast({ type: 'NEW_TRADES', data: trades });
-        db.insertTrades(trades).catch(e => {});
+    if (isMotorRunning) {
+        broadcast({ type: 'MARKET_DATA', lastPrice: last_price, variation: 0 });
     }
-    res.sendStatus(200);
 });
 
 wss.on('connection', async (ws) => {

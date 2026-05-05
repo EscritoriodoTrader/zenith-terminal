@@ -847,84 +847,45 @@ function connectMotor() {
                 needsHistoryRedraw = true;
                 needsScaleRedraw = true;
                 return;
-            }
-            if (msg.type === 'HISTORY') {
-                chartData = []; 
-                chartDataMap.clear();
-                processedTradeIds.clear();
-                processTrades(msg.data);
-                hasRealData = true;
-                needsHistoryRedraw = true;
-                needsScaleRedraw = true;
-                needsAutoScale = true;
-            }
-            if (msg.type === 'NEW_TRADES') {
-                if (!hasRealData) { chartData = []; chartDataMap.clear(); processedTradeIds.clear(); }
-                processTrades(msg.data);
-                hasRealData = true;
-                needsAutoScale = true;
-            }
-
-            if (msg.type === 'MARKET_DATA') {
-                if (msg.variation !== null) {
-                    const varElem = document.getElementById('variation');
-                    if (varElem) {
-                        const val = parseFloat(msg.variation) * 100;
-                        varElem.innerText = `${val >= 0 ? '+' : ''}${val.toFixed(2).replace('.', ',')}%`;
-                        varElem.style.color = val >= 0 ? posColor : negColor;
-                        varElem.style.opacity = "1";
-                    }
-                }
-                if (msg.lastPrice !== null && msg.lastPrice > 0) {
-                    externalLastPrice = msg.lastPrice;
-                    if (chartData.length > 0) {
-                        const cur = chartData[0];
-                        cur.close = externalLastPrice;
-                        if (externalLastPrice > cur.high) cur.high = externalLastPrice;
-                        if (externalLastPrice < cur.low) cur.low = externalLastPrice;
-                    }
-                    if (externalLastPrice > priceMax * 0.98 || externalLastPrice < priceMin * 1.02) {
-                        needsAutoScale = true;
-                    }
-                }
-            }
-
-            if (msg.type === 'VARIATION') {
-                const varElem = document.getElementById('variation');
-                if (varElem) {
-                    const val = parseFloat(msg.value);
-                    if (!isNaN(val)) {
-                        varElem.innerText = `${val >= 0 ? '+' : ''}${val.toFixed(2).replace('.', ',')}%`;
-                        varElem.style.color = val >= 0 ? posColor : negColor;
-                        varElem.style.opacity = "1";
-                    }
-                }
-            }
-
-
             if (msg.type === 'MOTOR_STATUS') {
                 const wasOff = motorStatus === 'off';
                 motorStatus = msg.running ? 'on' : 'off';
                 setStorage('zenith_motor', motorStatus);
                 updateMotorUI();
-
-                // Reset de segurança ao desligar
                 if (!msg.running) {
-                    hasRealData = false;
-                    chartData = [];
-                    chartDataMap.clear();
-                    processedTradeIds.clear();
+                    chartData = []; chartDataMap.clear(); processedTradeIds.clear(); rawTrades = [];
                     needsHistoryRedraw = true;
                 }
-
-                // Se o motor acabou de ligar, pede o histórico imediatamente
-                if (wasOff && msg.running && socket && socket.readyState === WebSocket.OPEN) {
+                if (wasOff && msg.running && socket.readyState === WebSocket.OPEN) {
                     socket.send(JSON.stringify({ type: 'GET_HISTORY' }));
                 }
             }
 
+            if (msg.type === 'MARKET_DATA') {
+                const varElem = document.getElementById('variation');
+                if (varElem) {
+                    varElem.innerText = (msg.variation || 0).toFixed(2) + '%';
+                    varElem.style.color = msg.variation >= 0 ? '#089981' : '#f23645';
+                    varElem.style.opacity = "1";
+                }
+                externalLastPrice = msg.lastPrice;
+                if (chartData.length > 0) {
+                    const cur = chartData[0];
+                    cur.close = externalLastPrice;
+                    if (externalLastPrice > cur.high) cur.high = externalLastPrice;
+                    if (externalLastPrice < cur.low) cur.low = externalLastPrice;
+                }
+            }
 
-
+            if (msg.type === 'HISTORICAL_TRADES' || msg.type === 'NEW_TRADES' || msg.type === 'NEW_TRADE') {
+                const list = msg.trades || msg.data || (msg.id ? [msg] : null);
+                if (list && list.length > 0) processTrades(list);
+            }
+            
+            if (msg.type === 'CLEAR_CHART') {
+                chartData = []; chartDataMap.clear(); processedTradeIds.clear(); rawTrades = [];
+                needsHistoryRedraw = true; draw();
+            }
         } catch (err) { console.error("Erro no processamento:", err); }
     };
 

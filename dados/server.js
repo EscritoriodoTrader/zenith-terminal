@@ -25,73 +25,56 @@ const wss = new WebSocket.Server({ server });
 let pythonProcess = null;
 let isMotorRunning = false;
 
-// Configurações do gráfico persistidas no servidor
 const SETTINGS_FILE = path.join(__dirname, 'settings.json');
 
-function loadSettings() {
-    if (fs.existsSync(SETTINGS_FILE)) {
-        try {
-            return JSON.parse(fs.readFileSync(SETTINGS_FILE, 'utf8'));
-        } catch (e) {
-            return {};
-        }
-    }
+function getSettings() {
+    try {
+        if (fs.existsSync(SETTINGS_FILE)) return JSON.parse(fs.readFileSync(SETTINGS_FILE));
+    } catch (e) { console.error("Erro ao ler settings:", e); }
     return {};
 }
 
 function saveSettings(settings) {
-    fs.writeFileSync(SETTINGS_FILE, JSON.stringify(settings, null, 4));
+    try { fs.writeFileSync(SETTINGS_FILE, JSON.stringify(settings, null, 2)); }
+    catch (e) { console.error("Erro ao salvar settings:", e); }
 }
 
-/**
- * Broadcast de mensagens para todos os clientes conectados
- */
 function broadcast(data) {
-    const message = JSON.stringify(data);
+    const msg = JSON.stringify(data);
     wss.clients.forEach(client => {
-        if (client.readyState === WebSocket.OPEN) {
-            client.send(message);
-        }
+        if (client.readyState === WebSocket.OPEN) client.send(msg);
     });
 }
 
+// Inicialização
+db.initDatabase().catch(err => {
+    console.error("Falha ao inicializar banco de dados:", err.message);
+});
+
 // ENDPOINTS API
-app.get('/api/settings', (req, res) => res.json(loadSettings()));
+app.get('/api/settings', (req, res) => res.json(getSettings()));
 app.post('/api/settings', (req, res) => {
     saveSettings(req.body);
     res.sendStatus(200);
 });
 
-// Endpoint para LIMPAR o banco de dados (Sessão Volátil)
 app.delete('/api/trades/clear', async (req, res) => {
-    try {
-        await pool.query('DELETE FROM trades');
-        broadcast({ type: 'CLEAR_CHART' });
-        console.log("🧹 Banco de dados limpo com sucesso.");
-        res.json({ success: true });
-    } catch (err) {
-        console.error("Erro ao limpar banco:", err);
-        res.status(500).json({ error: "Erro ao limpar banco" });
-    }
+    await db.clearDatabase();
+    broadcast({ type: 'CLEAR_CHART' });
+    res.sendStatus(200);
 });
 
-// Recebimento de trades do scanner.py
 app.post('/api/trades', async (req, res) => {
     const { trades, last_price, variation } = req.body;
 
-    // 1. Enviar dados de mercado (Preço e Variação)
     broadcast({
         type: 'MARKET_DATA',
         lastPrice: last_price,
         variation: variation
     });
 
-    // 2. Processar Novos Trades
     if (trades && trades.length > 0) {
-        // Enviar para o gráfico imediatamente
         broadcast({ type: 'NEW_TRADES', data: trades });
-
-        // Salvar no banco de dados em segundo plano
         db.insertTrades(trades).catch(err => console.error("Erro ao salvar trades:", err));
     }
 
@@ -101,74 +84,33 @@ app.post('/api/trades', async (req, res) => {
 // LÓGICA WEBSOCKET
 wss.on('connection', async (ws) => {
     console.log('Cliente conectado ao WebSocket.');
-
-    // Enviar status inicial
     ws.send(JSON.stringify({ type: 'MOTOR_STATUS', running: isMotorRunning }));
 
-    // Se o motor estiver rodando, enviar histórico imediatamente
-    if (isMotorRunning) {
-        const history = await db.getTrades();
-        ws.send(JSON.stringify({ type: 'HISTORY', data: history }));
+    // Envio Otimizado de Histórico Inicial
+    const history = await db.getTrades();
+    if (history.length > 0) {
+        console.log(`[WS]: Enviando lote inicial de ${history.length} trades.`);
+        ws.send(JSON.stringify({ type: 'HISTORICAL_TRADES', trades: history }));
     }
 
     ws.on('message', async (message) => {
         try {
             const cmd = JSON.parse(message);
-
             if (cmd.type === 'TOGGLE_MOTOR') {
-                if (!isMotorRunning) {
-                    // LIGAR MOTOR
-                    console.log("Iniciando Motor...");
-                    await db.initDatabase();
-                    // Opcional: Limpar banco ao ligar se o usuário preferir começar do zero
-                    // await db.clearDatabase(); 
-
-                    pythonProcess = spawn('python', [path.join(__dirname, 'scanner.py')]);
-                    
-                    pythonProcess.stdout.on('data', (data) => console.log(`[PYTHON]: ${data}`));
-                    pythonProcess.stderr.on('data', (data) => console.error(`[PYTHON ERROR]: ${data}`));
-                    
-                    isMotorRunning = true;
-                } else {
-                    // DESLIGAR MOTOR
-                    console.log("Desligando Motor...");
-                    if (pythonProcess) {
-                        pythonProcess.kill();
-                        pythonProcess = null;
-                    }
-                    isMotorRunning = false;
-                }
+                isMotorRunning = !isMotorRunning;
                 broadcast({ type: 'MOTOR_STATUS', running: isMotorRunning });
             }
-
             if (cmd.type === 'GET_HISTORY') {
-                const history = await db.getTrades();
-                ws.send(JSON.stringify({ type: 'HISTORY', data: history }));
+                const h = await db.getTrades();
+                ws.send(JSON.stringify({ type: 'HISTORICAL_TRADES', trades: h }));
             }
-
-            if (cmd.type === 'SHUTDOWN') {
-                console.log("Encerrando sistema...");
-                if (pythonProcess) pythonProcess.kill();
-                process.exit(0);
-            }
-        } catch (e) {
-            console.error("Erro no processamento de mensagem WS:", e);
-        }
+        } catch (e) { console.error("Erro no processamento WS:", e); }
     });
 });
 
-// INICIALIZAÇÃO
-const PORT = 3000;
-server.listen(PORT, async () => {
+const PORT = process.env.PORT || 3000;
+server.listen(PORT, () => {
     console.log(`=========================================`);
-    console.log(`ZENITH TERMINAL SERVER - ATIVO NA PORTA ${PORT}`);
-    console.log(`Acesse: http://localhost:${PORT}`);
+    console.log(` ZENITH TERMINAL SERVER - ATIVO NA PORTA ${PORT}`);
     console.log(`=========================================`);
-    
-    try {
-        await db.initDatabase();
-        console.log("Banco de dados inicializado.");
-    } catch (e) {
-        console.error("Falha ao inicializar banco de dados:", e.message);
-    }
 });

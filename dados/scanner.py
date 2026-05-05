@@ -89,7 +89,9 @@ def process_time(val, now):
             s = int(float(parts[2]))
         
         dt = now.replace(hour=h, minute=m, second=s, microsecond=0)
-        if dt > now + datetime.timedelta(minutes=1): dt -= datetime.timedelta(days=1)
+        # Tolerância de 4 horas para o futuro (evita pular para ontem se o relógio do Excel estiver adiantado)
+        if dt > now + datetime.timedelta(hours=4): 
+            dt -= datetime.timedelta(days=1)
         return int(dt.timestamp() * 1000), f"{h:02d}:{m:02d}:{s:02d}"
     except: return None, None
 
@@ -162,7 +164,10 @@ def main():
     while True:
         try:
             if not is_active:
-                historical_loaded = False
+                if historical_loaded: # Se estava ligado e agora desligou
+                    print("[STATUS]: Motor em STANDBY. Limpando memória local...")
+                    sent_trades_buffer.clear()
+                    historical_loaded = False
                 time.sleep(1)
                 continue
 

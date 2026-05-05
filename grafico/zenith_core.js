@@ -845,10 +845,20 @@ function connectMotor() {
                 motorStatus = msg.running ? 'on' : 'off';
                 setStorage('zenith_motor', motorStatus);
                 updateMotorUI();
+                
                 if (!msg.running) {
+                    console.log("🛑 Motor desligado. Limpando tudo...");
+                    // Limpeza Local (RAM)
                     chartData = []; chartDataMap.clear(); processedTradeIds.clear(); rawTrades = [];
                     needsHistoryRedraw = true;
+                    autoScale();
+                    draw();
+                    
+                    // Limpeza Remota (Banco de Dados)
+                    fetch('/api/trades/clear', { method: 'DELETE' })
+                        .catch(err => console.error("Erro ao limpar banco:", err));
                 }
+                
                 if (wasOff && msg.running && socket.readyState === WebSocket.OPEN) {
                     socket.send(JSON.stringify({ type: 'GET_HISTORY' }));
                 }
@@ -901,7 +911,13 @@ function processTrades(trades) {
     trades.forEach(t => {
         if (!t.id || processedTradeIds.has(t.id)) return;
         processedTradeIds.add(t.id);
-        rawTrades.push(t); // Salva no cache bruto
+        rawTrades.push(t); 
+        
+        // Limita o cache para evitar consumo excessivo de RAM (Mantém os últimos 15 mil)
+        if (rawTrades.length > 15000) {
+            const removed = rawTrades.shift();
+            processedTradeIds.delete(removed.id);
+        }
 
         const candleTime = Math.floor(t.timestamp / tfMs) * tfMs;
         let candle = chartDataMap.get(candleTime);

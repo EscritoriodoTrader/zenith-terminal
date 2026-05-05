@@ -850,7 +850,10 @@ function connectMotor() {
                     console.log("🛑 Motor desligado. Limpando tudo...");
                     // Limpeza Local (RAM)
                     chartData = []; chartDataMap.clear(); processedTradeIds.clear(); rawTrades = [];
+                    // Limpeza Visual (Cache de Imagem)
+                    historyCanvasCache.width = historyCanvasCache.width; // Reseta o cache de desenho
                     needsHistoryRedraw = true;
+                    needsScaleRedraw = true;
                     autoScale();
                     draw();
                     

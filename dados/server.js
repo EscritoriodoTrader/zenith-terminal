@@ -15,8 +15,18 @@ const wss = new WebSocket.Server({ server });
 
 let isMotorRunning = false;
 
-// Inicialização do Banco
-db.initDatabase().catch(err => console.error("Erro DB:", err.message));
+// Inicialização do Banco com log de erro detalhado
+console.log("[INIT]: Iniciando servidor...");
+db.initDatabase()
+    .then(() => console.log("[INIT]: Banco de dados pronto."))
+    .catch(err => {
+        console.error("❌ ERRO CRÍTICO NO BANCO:", err.message);
+        // Não mata o processo, deixa o servidor tentar subir
+    });
+
+process.on('uncaughtException', (err) => {
+    console.error('❌ ERRO NÃO TRATADO:', err);
+});
 
 function broadcast(data) {
     const msg = JSON.stringify(data);

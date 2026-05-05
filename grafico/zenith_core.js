@@ -1037,6 +1037,27 @@ if (connStatus) {
         }
         setTimeout(() => { window.close(); }, 1500);
     };
+}
 
+// BOTÃO DE LIMPEZA MANUAL (LIXEIRA)
+const toolClear = document.getElementById('tool-clear');
+if (toolClear) {
+    toolClear.onclick = () => {
+        if (!confirm("Deseja realmente LIMPAR todos os dados do gráfico e do banco de dados?")) return;
+        
+        console.log("🗑️ Iniciando Limpeza Manual...");
+        // 1. Limpa Memória Local
+        chartData = []; chartDataMap.clear(); processedTradeIds.clear(); rawTrades = [];
+        // 2. Limpa Imagem
+        historyCanvasCache.width = historyCanvasCache.width;
+        needsHistoryRedraw = true;
+        autoScale();
+        draw();
+        
+        // 3. Limpa Banco de Dados Remoto
+        fetch('/api/trades/clear', { method: 'DELETE' })
+            .then(() => alert("Gráfico e Banco de Dados Limpos!"))
+            .catch(err => console.error("Erro ao limpar:", err));
+    };
 }
 

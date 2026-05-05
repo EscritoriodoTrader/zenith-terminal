@@ -55,14 +55,15 @@ app.delete('/api/trades/clear', async (req, res) => {
 app.post('/api/trades', (req, res) => {
     const { trades, last_price } = req.body;
     
-    // 1. Responde IMEDIATAMENTE para o Python não travar
+    // Responde IMEDIATAMENTE
     res.status(200).send("OK");
 
-    // 2. Processa o resto em "background" (segundo plano)
     if (trades && trades.length > 0) {
-        console.log(`[AUDIT]: Recebidos ${trades.length} trades.`);
+        // Envia direto para o gráfico via WebSocket (VELOCIDADE MÁXIMA)
         broadcast({ type: 'NEW_TRADES', data: trades });
-        db.insertTrades(trades).catch(e => console.error("[DB ERROR]:", e.message));
+        
+        // Salva no banco de forma "silenciosa" e sem pressa
+        // db.insertTrades(trades).catch(e => {}); // Desativado para teste de performance
     }
     
     if (isMotorRunning) {

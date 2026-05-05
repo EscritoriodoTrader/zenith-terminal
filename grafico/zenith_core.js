@@ -959,6 +959,12 @@ function processTrades(trades) {
         chartData.sort((a, b) => b.timestamp - a.timestamp);
         needsHistoryRedraw = true;
         needsScaleRedraw = true;
+        
+        // FORÇA O PULO PARA O PREÇO REAL (Não deixa as velas escondidas)
+        if (chartData.length > 0) {
+            autoScale(); 
+            console.log("📈 [AUTO-SCALE]: Gráfico ajustado para o preço real.");
+        }
     }
 }
 

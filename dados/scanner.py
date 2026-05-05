@@ -108,58 +108,40 @@ def process_time(val, now):
         return None, None
 
 def read_historical_data(sent_buffer):
-    """Lê a aba Histórico dinamicamente (Colunas A, C, D, F)"""
+    """Lê a aba Histórico para carregar o passado"""
     global last_historical_ts
-    sheet_h = get_sheet(SHEET_HISTORICO)
-    if not sheet_h:
-        print(f"[HISTORICO]: Aba '{SHEET_HISTORICO}' não encontrada.")
-        return
+    sheet_h = get_sheet("Historico")
+    if not sheet_h: return
     
-    print(f"[HISTORICO]: Detectando tamanho do histórico...")
-    # Encontra a última linha preenchida na coluna A
     last_row = sheet_h.range("A" + str(sheet_h.cells.last_cell.row)).end('up').row
-    if last_row < 2: 
-        print("[HISTORICO]: Aba vazia.")
-        return
+    if last_row < 2: return
 
-    print(f"[HISTORICO]: Lendo {last_row - 1} linhas...")
-    # Lê as colunas A até F (0 a 5 no índice Python)
-    data = sheet_h.range(f"A2:F{last_row}").value
-    if not isinstance(data[0], list): data = [data] # Trata caso de 1 única linha
+    print(f"[HISTORICO]: Lendo {last_row - 1} trades passados...")
+    data = sheet_h.range(f"A2:F{last_row}").value # A=Hora, C=Preço, D=Qtd, F=Agressor
+    if not isinstance(data[0], list): data = [data]
 
     now = datetime.datetime.now()
     hist_trades = []
-    counters = {}
-
     for row in data:
         if not row or len(row) < 6: continue
-        
-        time_val = row[0]   # Coluna A
-        price_val = row[2]  # Coluna C
-        qty_val = row[3]    # Coluna D
-        side_val = str(row[5]).upper() # Coluna F (Agressor)
-
-        if time_val and price_val and qty_val:
-            ts, time_str = process_time(time_val, now)
-            if ts:
-                price, qty = float(price_val), int(qty_val)
-                # Normaliza o lado (Compra/Venda, Buy/Sell, etc)
-                side = "BUY" if "C" in side_val or "B" in side_val else "SELL"
+        ts, time_str = process_time(row[0], now)
+        if ts:
+            try:
+                price = float(str(row[2]).replace('.','').replace(',','.')) if row[2] else 0
+                qty = int(row[3]) if row[3] else 0
+                side = "BUY" if "COMPR" in str(row[5]).upper() else "SELL"
                 
-                sig = f"{side}_{time_str}_{price}_{qty}"
-                counters[sig] = counters.get(sig, 0) + 1
-                uid = f"{sig}_{counters[sig]}"
-                
+                uid = f"HIST_{ts}_{price}_{qty}_{side}"
                 if uid not in sent_buffer:
                     hist_trades.append({"id": uid, "timestamp": ts, "price": price, "quantity": qty, "side": side})
                     sent_buffer.add(uid)
                     if ts > last_historical_ts: last_historical_ts = ts
+            except: continue
 
     if hist_trades:
-        print(f"[HISTORICO]: Enviando {len(hist_trades)} trades históricos...")
-        for i in range(0, len(hist_trades), 500):
-            tx_queue.put({"trades": hist_trades[i:i+500], "last_price": 0, "variation": 0})
-        print(f"[HISTORICO]: Finalizado. Sincronizado até {datetime.datetime.fromtimestamp(last_historical_ts/1000).strftime('%H:%M:%S')}")
+        hist_trades.sort(key=lambda x: x['timestamp'])
+        print(f"[HISTORICO]: Enviando {len(hist_trades)} trades históricos.")
+        tx_queue.put({"trades": hist_trades, "last_price": hist_trades[-1]['price'], "variation": 0})
 
 def main():
     global last_historical_ts
@@ -184,69 +166,75 @@ def main():
                 continue
 
             if not historical_loaded:
-                print(f"[{datetime.datetime.now().strftime('%H:%M:%S')}] Motor Ligado! Resetando banco e carregando dados...")
-                clear_database() # Limpa o banco de dados na nuvem para a nova sessão
+                print(f"[{datetime.datetime.now().strftime('%H:%M:%S')}] Motor Ligado! Resetando e carregando histórico...")
+                clear_database()
                 read_historical_data(sent_trades_buffer)
                 historical_loaded = True
 
             if not sheet_rtd:
-                sheet_rtd = get_sheet(SHEET_RTD)
+                sheet_rtd = get_sheet("Dados_RTD")
                 if not sheet_rtd:
                     time.sleep(2)
                     continue
-                print(f"Conectado à aba {SHEET_RTD}. Iniciando Tempo Real...")
+                print("[RTD]: Conectado à aba Dados_RTD.")
 
-            # O RTD continua na lógica antiga de duas colunas (comum em RTDs de fluxo)
-            data = sheet_rtd.range("A2:J507").value
+            # Leitura do Tempo Real (Duas Tabelas: Compra A-D | Venda G-J)
+            data = sheet_rtd.range("A8:J500").value
             if not data or not data[0]:
                 time.sleep(0.1)
                 continue
 
-            current_price = data[0][2] or 0
-            current_variation = data[0][7] or 0
-            trade_rows = data[6:]
+            # Preço atual pegamos da primeira linha de Compra ou Venda
+            current_price = 0
+            if data[0][1]: current_price = float(str(data[0][1]).replace('.','').replace(',','.'))
+            elif data[0][7]: current_price = float(str(data[0][7]).replace('.','').replace(',','.'))
+            
             now = datetime.datetime.now()
             new_trades = []
             counters = {}
 
-            for row in trade_rows:
-                # COMPRA (A, B, C no RTD)
+            for row in data:
+                # 1. PROCESSA BLOCO COMPRA (A, B, C, D)
                 if row[0] and row[1] and row[2]:
                     ts, time_str = process_time(row[0], now)
                     if ts and ts >= last_historical_ts:
-                        price, qty = float(row[1]), int(row[2])
-                        sig = f"BUY_{time_str}_{price}_{qty}"
-                        counters[sig] = counters.get(sig, 0) + 1
-                        uid = f"{sig}_{counters[sig]}"
-                        if uid not in sent_trades_buffer:
-                            new_trades.append({"id": uid, "timestamp": ts, "price": price, "quantity": qty, "side": "BUY"})
-                            sent_trades_buffer.add(uid)
-                # VENDA (G, H, I no RTD)
+                        try:
+                            p = float(str(row[1]).replace('.','').replace(',','.'))
+                            q = int(row[2])
+                            sig = f"BUY_{ts}_{p}_{q}"
+                            counters[sig] = counters.get(sig, 0) + 1
+                            uid = f"{sig}_{counters[sig]}"
+                            if uid not in sent_trades_buffer:
+                                new_trades.append({"id": uid, "timestamp": ts, "price": p, "quantity": q, "side": "BUY"})
+                                sent_trades_buffer.add(uid)
+                        except: pass
+
+                # 2. PROCESSA BLOCO VENDA (G, H, I, J)
                 if row[6] and row[7] and row[8]:
                     ts, time_str = process_time(row[6], now)
                     if ts and ts >= last_historical_ts:
-                        price, qty = float(row[7]), int(row[8])
-                        sig = f"SELL_{time_str}_{price}_{qty}"
-                        counters[sig] = counters.get(sig, 0) + 1
-                        uid = f"{sig}_{counters[sig]}"
-                        if uid not in sent_trades_buffer:
-                            new_trades.append({"id": uid, "timestamp": ts, "price": price, "quantity": qty, "side": "SELL"})
-                            sent_trades_buffer.add(uid)
+                        try:
+                            p = float(str(row[7]).replace('.','').replace(',','.'))
+                            q = int(row[8])
+                            sig = f"SELL_{ts}_{p}_{q}"
+                            counters[sig] = counters.get(sig, 0) + 1
+                            uid = f"{sig}_{counters[sig]}"
+                            if uid not in sent_trades_buffer:
+                                new_trades.append({"id": uid, "timestamp": ts, "price": p, "quantity": q, "side": "SELL"})
+                                sent_trades_buffer.add(uid)
+                        except: pass
 
-            if len(sent_trades_buffer) > 35000:
-                sent_trades_buffer = set(list(sent_trades_buffer)[-15000:])
+            if len(sent_trades_buffer) > 40000:
+                sent_trades_buffer = set(list(sent_trades_buffer)[-20000:])
 
-            p_changed = abs(current_price - last_price_sent) > 0.0001
-            v_changed = abs(current_variation - last_variation_sent) > 0.0001
-            
-            if new_trades or p_changed or v_changed:
+            if new_trades or abs(current_price - last_price_sent) > 0.001:
                 if new_trades: new_trades.sort(key=lambda x: x['timestamp'])
-                tx_queue.put({"trades": new_trades, "last_price": current_price, "variation": current_variation})
-                last_price_sent, last_variation_sent = current_price, current_variation
+                tx_queue.put({"trades": new_trades, "last_price": current_price, "variation": 0})
+                last_price_sent = current_price
 
             time.sleep(SCAN_INTERVAL)
         except Exception as e:
-            print(f"[LOOP ERROR]: {e}")
+            print(f"[RTD ERROR]: {e}")
             sheet_rtd = None
             time.sleep(1)
 

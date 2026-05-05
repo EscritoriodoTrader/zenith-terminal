@@ -53,8 +53,10 @@ app.delete('/api/trades/clear', async (req, res) => {
 });
 
 app.post('/api/trades', async (req, res) => {
+    const { trades, last_price } = req.body;
+    if (trades && trades.length > 0) console.log(`[HTTP]: Recebidos ${trades.length} trades do Python.`);
+    
     if (!isMotorRunning) return res.status(200).send("OFF");
-    const { trades, last_price, variation } = req.body;
     broadcast({ type: 'MARKET_DATA', lastPrice: last_price, variation });
     if (trades && trades.length > 0) {
         broadcast({ type: 'NEW_TRADES', data: trades });

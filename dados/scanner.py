@@ -78,36 +78,33 @@ def get_sheet(name):
 
 def process_time(val, now):
     try:
-        # 1. Tenta tratar como objeto datetime do Excel/xlwings
+        # Pega apenas a Hora, Minuto e Segundo, ignorando qualquer data do Excel
         if isinstance(val, datetime.datetime):
-            dt = val
+            h, m, s = val.hour, val.minute, val.second
         elif isinstance(val, (float, int)):
             seconds = int(val * 86400)
             h, m, s = (seconds // 3600) % 24, (seconds // 60) % 60, seconds % 60
-            dt = now.replace(hour=h, minute=m, second=s, microsecond=0)
         else:
-            # 2. Tenta tratar String (Ex: "2026-05-04 10:00:00" ou "10:00:00")
-            val_str = str(val).replace(',', '.')
-            if "-" in val_str and ":" in val_str:
-                # Formato completo: YYYY-MM-DD HH:MM:SS
-                dt = datetime.datetime.strptime(val_str.split('.')[0], "%Y-%m-%d %H:%M:%S")
-            else:
-                # Apenas hora: HH:MM:SS
-                parts = val_str.split(':')
-                h, m, s = int(parts[0]), int(parts[1]), int(float(parts[2]))
-                dt = now.replace(hour=h, minute=m, second=s, microsecond=0)
+            val_str = str(val).replace(',', '.') # Transforma "00:00:00,00" em "00:00:00.00"
+            time_part = val_str.split(' ')[-1] if ' ' in val_str else val_str
+            parts = time_part.split(':')
+            h = int(parts[0])
+            m = int(parts[1])
+            # Trata o segundo com milissegundos (ex: 00.00)
+            s_full = float(parts[2])
+            s = int(s_full)
+            ms = int((s_full - s) * 1000)
         
-        # 3. Filtros de Sanidade
-        # Se o trade for do "futuro" (mais de 4h à frente), assume que é de ontem
+        # FORÇA A DATA PARA HOJE
+        dt = now.replace(hour=h, minute=m, second=s, microsecond=ms * 1000)
+        
+        # Se a hora for muito no futuro (ex: Excel marca 23:00 e agora é 01:00 da manhã),
+        # aí sim assumimos que é o dia anterior (final da noite passada).
         if dt > now + datetime.timedelta(hours=4): 
             dt -= datetime.timedelta(days=1)
-        
-        # Se o trade for muito antigo (mais de 12 horas atrás), descartamos para evitar mistura
-        if dt < now - datetime.timedelta(hours=12):
-            return None, None
 
         return int(dt.timestamp() * 1000), dt.strftime('%H:%M:%S')
-    except Exception as e:
+    except:
         return None, None
 
 def read_historical_data(sent_buffer):

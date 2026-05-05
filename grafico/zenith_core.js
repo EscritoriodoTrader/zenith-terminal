@@ -344,7 +344,17 @@ function draw() {
             ctx.fillStyle = "rgba(255,255,255,0.5)";
             ctx.font = "20px Arial";
             ctx.textAlign = "center";
-            ctx.fillText("Aguardando dados reais do Excel...", (canvas.width/dpr - rightMargin)/2, (canvas.height/dpr)/2);
+            
+            let statusText = "Aguardando dados reais do Excel...";
+            if (!socket || socket.readyState !== WebSocket.OPEN) {
+                statusText = "❌ DESCONECTADO DO SERVIDOR (Tentando reconectar...)";
+                ctx.fillStyle = "#f23645";
+            } else if (motorStatus === 'off') {
+                statusText = "⏸️ MOTOR DESLIGADO. Clique no botão de Power para iniciar.";
+                ctx.fillStyle = "#ff9800";
+            }
+
+            ctx.fillText(statusText, (canvas.width/dpr - rightMargin)/2, (canvas.height/dpr)/2);
             
             requestAnimationFrame(draw); 
             return; 

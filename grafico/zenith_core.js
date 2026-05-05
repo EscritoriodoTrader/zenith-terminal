@@ -520,13 +520,13 @@ function drawSingleCandle(targetCtx, c, i, range, cW, tickH) {
         targetCtx.fillStyle = footprintBgColor; 
         targetCtx.fillRect(Math.round(x - bW/4), startY, Math.round(bW/2), boxH);
 
-        const isPos = pNum >= c.open;
-        targetCtx.fillStyle = isPos ? hexToRgba(posColor, 100) : hexToRgba(negColor, 100); 
+        const isPosLevel = s >= 0; // CORRIGIDO: Agora usa o Saldo (Delta) para decidir a cor
+        targetCtx.fillStyle = isPosLevel ? hexToRgba(posColor, 100) : hexToRgba(negColor, 100); 
         targetCtx.fillRect(Math.round(x + bW/4), Math.round(y - tickH/4), Math.round(((t.buy+t.sell)/c.maxV)*mBW), Math.round(tickH/2));
 
         if (tickH > 8 && cW > 30) {
             // Saldo (Delta) à esquerda
-            targetCtx.fillStyle = isPos ? posColor : negColor; 
+            targetCtx.fillStyle = isPosLevel ? posColor : negColor; 
             targetCtx.textAlign = "right"; 
             targetCtx.fillText(s, Math.round(x - (bW/4) - 6), Math.round(y + 4));
             

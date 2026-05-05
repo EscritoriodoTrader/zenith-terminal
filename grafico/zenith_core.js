@@ -281,8 +281,9 @@ function drawScales(range) {
     
     // DESENHAR ETIQUETA DE PREÇO ATUAL (CHEVRON)
     const currentPrice = externalLastPrice || (chartData[0] ? chartData[0].close : 0);
+    const safeRange = (priceMax - priceMin) || 1; // Evita divisão por zero
     if (currentPrice > 0) {
-        const y = sH - ((currentPrice - priceMin) / (priceMax - priceMin)) * sH;
+        const y = sH - ((currentPrice - priceMin) / safeRange) * sH;
         if (y >= 0 && y <= sH) {
             drawChevronTag(scaleCtx, y, themeColor, "#000", priceFormatter.format(currentPrice), sW);
         }
@@ -293,7 +294,7 @@ function drawScales(range) {
 
     // LINHA DE PREÇO ATUAL INFINITA (Estilo TradingView)
     if (currentPrice > 0) {
-        const y = sH - ((currentPrice - priceMin) / (priceMax - priceMin)) * sH;
+        const y = sH - ((currentPrice - priceMin) / safeRange) * sH;
         ctx.save();
         ctx.setLineDash([5, 5]);
         ctx.strokeStyle = themeColor; 

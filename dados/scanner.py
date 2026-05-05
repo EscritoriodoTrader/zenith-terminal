@@ -13,9 +13,25 @@ import json
 EXCEL_FILE_NAME = "Fluxo.xlsm"
 SHEET_RTD = "Dados_RTD"
 SHEET_HISTORICO = "Historico"
-SERVER_HOST = "zenith-terminal-bvj4.onrender.com"
-POST_URL = f"https://{SERVER_HOST}/api/trades"
-SCAN_INTERVAL = 0.005 
+
+# Tenta usar Localhost se o server estiver rodando na mesma máquina
+LOCAL_SERVER = "localhost:10000"
+REMOTE_SERVER = "zenith-terminal-bvj4.onrender.com"
+SERVER_HOST = LOCAL_SERVER 
+
+# Detecta se é local ou remoto para o protocolo HTTP
+HTTP_PROTOCOL = "http" if "localhost" in SERVER_HOST or "127.0.0.1" in SERVER_HOST else "https"
+POST_URL = f"{HTTP_PROTOCOL}://{SERVER_HOST}/api/trades"
+SCAN_INTERVAL = 0.001 # Velocidade Ultra-Rápida
+
+# Trava de Instância Única (Evita dois Pythons rodando)
+import socket
+try:
+    lock_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    lock_socket.bind(("127.0.0.1", 12345)) # Porta de trava arbitrária
+except socket.error:
+    print("[ERRO]: Já existe um motor Zenith rodando! Feche o anterior antes de iniciar.")
+    exit()
 
 # Fila de transmissão e Sincronização
 tx_queue = queue.Queue()
@@ -40,9 +56,12 @@ def start_ws():
         print(f"[WS]: Iniciando conexão com o servidor em {SERVER_HOST}...")
         while True:
             try:
-                ws_url = f"wss://{SERVER_HOST}"
+                # Detecta se deve usar WS (local) ou WSS (nuvem)
+                protocol = "ws" if "localhost" in SERVER_HOST or "127.0.0.1" in SERVER_HOST else "wss"
+                ws_url = f"{protocol}://{SERVER_HOST}"
+                
                 ws = websocket.WebSocketApp(ws_url, on_message=on_message)
-                print(f"[WS]: Túnel de dados aberto.")
+                print(f"[WS]: Túnel de dados aberto em {ws_url}")
                 ws.run_forever()
             except Exception as e:
                 print(f"[WS]: Erro na conexão: {e}")
@@ -53,36 +72,52 @@ start_ws()
 
 def tx_worker():
     print("[TX]: Canal de transmissão iniciado.")
+    consecutive_failures = 0
     while True:
         try:
             payload = tx_queue.get()
             if payload is None: break
             
-            # TENTA ENVIAR VIA WEBSOCKET (MUITO MAIS RÁPIDO)
             sent_ws = False
+            # TENTA WS
             if ws_client and ws_client.sock and ws_client.sock.connected:
                 try:
                     ws_client.send(json.dumps({
                         "type": "NEW_TRADES",
+                        "asset": payload.get("asset", "---"),
                         "data": payload.get("trades", []),
-                        "last_price": payload.get("last_price")
+                        "last_price": payload.get("last_price", 0),
+                        "variation": payload.get("variation", 0)
                     }))
                     sent_ws = True
+                    consecutive_failures = 0 
                 except: pass
             
-            # SE O WS FALHAR, USA O HTTP COMO BACKUP
+            # SE FALHAR WS, TENTA HTTP
             if not sent_ws:
                 try:
-                    session.post(POST_URL, json=payload, timeout=3)
-                except: pass
+                    res = session.post(POST_URL, json=payload, timeout=2)
+                    if res.status_code == 200:
+                        consecutive_failures = 0
+                    else:
+                        consecutive_failures += 1
+                except:
+                    consecutive_failures += 1
+            
+            # SE FALHAR TUDO POR MUITO TEMPO, AUTO-DESLIGA
+            if consecutive_failures > 5:
+                print("\n[AUTO-STOP]: Conexão perdida com o terminal. Encerrando motor...")
+                import os
+                os._exit(0)
                 
             tx_queue.task_done()
-        except: pass
+        except Exception as e:
+            time.sleep(1)
 
 def clear_database():
     try:
         print("[INIT]: Solicitando limpeza do banco de dados para nova sessão...")
-        requests.delete(f"https://{SERVER_HOST}/api/trades/clear", timeout=5)
+        requests.delete(f"{HTTP_PROTOCOL}://{SERVER_HOST}/api/trades/clear", timeout=5)
         print("[INIT]: Banco de dados resetado com sucesso.")
     except Exception as e:
         print(f"[INIT ERROR]: Falha ao resetar banco: {e}")
@@ -134,6 +169,21 @@ def clean_price(val):
         # AJUSTE NASDAC: Se o número vier como 278375 (sem ponto), 
         # ele vira 27837.5 automaticamente.
         if n > 100000: n = n / 10.0
+        return n
+    except: return 0.0
+
+def clean_variation(val):
+    try:
+        if isinstance(val, (float, int)): 
+            n = float(val)
+        else:
+            s = str(val).strip().replace(' ', '').replace('%', '')
+            if ',' in s and '.' in s: s = s.replace('.', '').replace(',', '.')
+            elif ',' in s: s = s.replace(',', '.')
+            n = float(s)
+        
+        # Ajuste de Escala (Ex: 139.0 -> 1.39)
+        if abs(n) > 10: n = n / 100.0
         return n
     except: return 0.0
 
@@ -219,11 +269,15 @@ def main():
                 time.sleep(0.1)
                 continue
 
-            # Preço atual pegamos da célula C2 (como solicitado)
+            # Leitura do Cabeçalho (Ativo A2 | Preço C2 | Variação H2)
             try:
+                asset_name = str(sheet_rtd.range("A2").value or "---")
                 current_price = clean_price(sheet_rtd.range("C2").value)
+                variation = clean_variation(sheet_rtd.range("H2").value)
             except:
+                asset_name = "---"
                 current_price = 0
+                variation = 0
             
             now = datetime.datetime.now()
             new_trades = []
@@ -263,15 +317,24 @@ def main():
             if len(sent_trades_buffer) > 40000:
                 sent_trades_buffer = set(list(sent_trades_buffer)[-20000:])
 
-            if new_trades:
-                print(f"[{datetime.datetime.now().strftime('%H:%M:%S')}] >>> ENVIANDO {len(new_trades)} TRADES | EX: {new_trades[0]['timestamp']} <<<")
-                new_trades.sort(key=lambda x: x['timestamp'])
-                tx_queue.put({"trades": new_trades, "last_price": current_price, "variation": 0})
+            # Envia sempre a variação e o nome do ativo, mesmo sem novos trades (para manter UI atualizada)
+            if new_trades or current_price != last_price_sent or variation != last_variation_sent:
+                print(f"[{datetime.datetime.now().strftime('%H:%M:%S')}] >>> ENVIANDO DADOS | {asset_name} | Preço: {current_price} | Var: {variation:.2f}% <<<")
+                if new_trades: new_trades.sort(key=lambda x: x['timestamp'])
+                
+                tx_queue.put({
+                    "type": "NEW_DATA",
+                    "asset": asset_name,
+                    "trades": new_trades, 
+                    "last_price": current_price, 
+                    "variation": variation
+                })
                 last_price_sent = current_price
+                last_variation_sent = variation
             else:
                 if time.time() - last_wait_log > 2:
                     status_motor = "LIGADO" if is_active else "STANDBY"
-                    print(f"[{datetime.datetime.now().strftime('%H:%M:%S')}] [VIVO] Motor: {status_motor} | Lendo aba Dados_RTD...")
+                    print(f"[{datetime.datetime.now().strftime('%H:%M:%S')}] [VIVO] Motor: {status_motor} | Ativo: {asset_name} | Lendo RTD...")
                     last_wait_log = time.time()
 
             time.sleep(SCAN_INTERVAL)

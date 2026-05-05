@@ -4,6 +4,31 @@ const WebSocket = require('ws');
 const path = require('path');
 const fs = require('fs');
 
+// --- FUNÇÃO DE LIMPEZA ABSOLUTA ---
+const cleanup = () => {
+    console.log("\n🛑 [SISTEMA]: Iniciando encerramento total...");
+    try {
+        if (process.platform === "win32") {
+            const { execSync } = require('child_process');
+            console.log("[SISTEMA]: Finalizando motor Python...");
+            // Executa com timeout de 2s para não travar o Node
+            try {
+                execSync('taskkill /F /IM python.exe', { stdio: 'ignore', timeout: 2000 });
+            } catch (e) {}
+        } else {
+            if (global.pythonProcess) global.pythonProcess.kill();
+        }
+    } catch (err) {
+        console.log("[SISTEMA]: Erro na limpeza, mas prosseguindo com o fechamento.");
+    }
+    
+    console.log("[SISTEMA]: Adeus!");
+    setTimeout(() => { process.exit(0); }, 500);
+};
+
+process.on('SIGINT', cleanup);
+process.on('SIGTERM', cleanup);
+
 const db = require('./database');
 
 const app = express();
@@ -38,9 +63,12 @@ process.on('uncaughtException', (err) => {
 });
 
 function broadcast(data) {
-    const msg = JSON.stringify(data);
-    wss.clients.forEach(c => {
-        if (c.readyState === WebSocket.OPEN) c.send(msg);
+    const message = JSON.stringify(data);
+    wss.clients.forEach((client) => {
+        if (client.readyState === 2) return; // 2 = CLOSING
+        if (client.readyState === 1) { // 1 = OPEN
+            client.send(message);
+        }
     });
 }
 
@@ -53,21 +81,19 @@ app.delete('/api/trades/clear', async (req, res) => {
 });
 
 app.post('/api/trades', (req, res) => {
-    const { trades, last_price } = req.body;
+    const { trades, last_price, asset, variation } = req.body;
     
     // Responde IMEDIATAMENTE
     res.status(200).send("OK");
 
-    if (trades && trades.length > 0) {
-        // Envia direto para o gráfico via WebSocket (VELOCIDADE MÁXIMA)
-        broadcast({ type: 'NEW_TRADES', data: trades });
-        
-        // Salva no banco de forma "silenciosa" e sem pressa
-        // db.insertTrades(trades).catch(e => {}); // Desativado para teste de performance
-    }
-    
     if (isMotorRunning) {
-        broadcast({ type: 'MARKET_DATA', lastPrice: last_price, variation: 0 });
+        broadcast({ 
+            type: 'NEW_TRADES', 
+            data: trades || [], 
+            asset: asset, 
+            variation: variation, 
+            lastPrice: last_price 
+        });
     }
 });
 
@@ -82,10 +108,13 @@ wss.on('connection', async (ws) => {
             
             // RECEBIMENTO DE TRADES VIA WEBSOCKET (ALTA PERFORMANCE)
             if (cmd.type === 'NEW_TRADES' && cmd.data) {
-                broadcast({ type: 'NEW_TRADES', data: cmd.data });
-                if (cmd.last_price) {
-                    broadcast({ type: 'MARKET_DATA', lastPrice: cmd.last_price, variation: 0 });
-                }
+                broadcast({ 
+                    type: 'NEW_TRADES', 
+                    data: cmd.data, 
+                    asset: cmd.asset, 
+                    variation: cmd.variation,
+                    lastPrice: cmd.last_price 
+                });
             }
 
             if (cmd.type === 'TOGGLE_MOTOR') {
@@ -97,19 +126,49 @@ wss.on('connection', async (ws) => {
                 const h = await db.getTrades();
                 ws.send(JSON.stringify({ type: 'HISTORICAL_TRADES', trades: h }));
             }
+
+            // COMANDO DE DESLIGAMENTO TOTAL (REMOTO)
+            if (cmd.type === 'SHUTDOWN') {
+                cleanup(); 
+            }
         } catch (e) {}
     });
 });
 
 const PORT = process.env.PORT || 10000;
-server.listen(PORT, () => console.log(`ZENITH ON: ${PORT}`));
+server.listen(PORT, () => {
+    console.log(`\n🚀 ZENITH TERMINAL LIGADO: http://localhost:${PORT}`);
+    startPythonScanner();
+});
 
-function broadcast(data) {
-    const message = JSON.stringify(data);
-    wss.clients.forEach((client) => {
-        if (client.readyState === 2) return; // 2 = CLOSING
-        if (client.readyState === 1) { // 1 = OPEN
-            client.send(message);
+// ==========================================
+// INTEGRAÇÃO AUTOMÁTICA COM O PYTHON
+// ==========================================
+const { spawn } = require('child_process');
+global.pythonProcess = null;
+
+function startPythonScanner() {
+    console.log("[SISTEMA]: Iniciando o motor de dados Python...");
+    
+    // Caminho absoluto para o scanner na mesma pasta do servidor
+    const scannerPath = path.join(__dirname, 'scanner.py');
+    
+    // Tenta rodar com 'python' (Windows padrão) ou 'python3'
+    global.pythonProcess = spawn('python', [scannerPath], {
+        stdio: 'inherit', // Faz os logs do Python aparecerem no terminal do Node
+        shell: true
+    });
+
+    global.pythonProcess.on('error', (err) => {
+        console.error("❌ ERRO AO INICIAR PYTHON:", err.message);
+        console.log("Dica: Verifique se o Python está instalado e no PATH do sistema.");
+    });
+
+    global.pythonProcess.on('close', (code) => {
+        if (code !== 0 && code !== null) {
+            console.log(`[AVISO]: O motor Python parou inesperadamente (Código ${code}). Reiniciando em 5s...`);
+            setTimeout(startPythonScanner, 5000);
         }
+    });
     });
 }

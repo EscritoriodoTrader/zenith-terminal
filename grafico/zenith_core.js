@@ -18,11 +18,11 @@ const filterContainer = document.getElementById('filter-container');
 
 // 2. ESTADO GLOBAL (STORAGE SEGURO)
 function getStorage(key, fallback) {
-    try { return localStorage.getItem(key) || fallback; } 
+    try { return localStorage.getItem(key) || fallback; }
     catch (e) { return fallback; }
 }
 function setStorage(key, val) {
-    try { localStorage.setItem(key, val); } 
+    try { localStorage.setItem(key, val); }
     catch (e) { console.warn("Storage bloqueado por segurança do navegador (CORS/File)"); }
 }
 
@@ -44,15 +44,15 @@ let footprintFontColor = getStorage('zenith_footprint_font', '#ffffff');
 
 
 let filters = [];
-try { 
-    filters = JSON.parse(localStorage.getItem('zenith_filters')) || [{ balance: 100, color: '#ffd700', opacity: 80 }]; 
-} catch(e) { 
-    filters = [{ balance: 100, color: '#ffd700', opacity: 80 }]; 
+try {
+    filters = JSON.parse(localStorage.getItem('zenith_filters')) || [{ balance: 100, color: '#ffd700', opacity: 80 }];
+} catch (e) {
+    filters = [{ balance: 100, color: '#ffd700', opacity: 80 }];
 }
 
-let rawTrades = []; 
+let rawTrades = [];
 let processedTradeIds = new Set();
-let tempSettings = {}; 
+let tempSettings = {};
 let motorStatus = getStorage('zenith_motor', 'off');
 let socket;
 
@@ -67,8 +67,8 @@ function hexToRgba(hex, opacity) {
     return `rgba(${r}, ${g}, ${b}, ${opacity / 100})`;
 }
 
-function isModalOpen() { 
-    return (settingsOverlay && settingsOverlay.classList.contains('active')) || (searchOverlay && searchOverlay.classList.contains('active')); 
+function isModalOpen() {
+    return (settingsOverlay && settingsOverlay.classList.contains('active')) || (searchOverlay && searchOverlay.classList.contains('active'));
 }
 
 // 2.1 PERSISTÊNCIA NO SERVIDOR (Sincronização com o Sistema)
@@ -83,7 +83,7 @@ async function loadSettingsFromServer() {
             if (cfg.negColor) { negColor = cfg.negColor; setStorage('zenith_neg_color', negColor); }
             if (cfg.currentTimeframe) { currentTimeframe = cfg.currentTimeframe; setStorage('zenith_timeframe', currentTimeframe); }
             if (cfg.filters) { filters = cfg.filters; setStorage('zenith_filters', JSON.stringify(filters)); }
-            
+
             // Novos campos para persistência completa
             if (cfg.scaleFontSize) { scaleFontSize = parseInt(cfg.scaleFontSize); setStorage('zenith_font_size', scaleFontSize); }
             if (cfg.scaleFontColor) { scaleFontColor = cfg.scaleFontColor; setStorage('zenith_font_color', scaleFontColor); }
@@ -97,7 +97,10 @@ async function loadSettingsFromServer() {
             // Aplicar CSS e UI
             document.documentElement.style.setProperty('--theme-bg', themeColor);
             const tfDisp = document.getElementById('tf-display');
-            if (tfDisp) tfDisp.innerText = currentTimeframe.toUpperCase();
+            if (tfDisp && motorStatus === 'on') {
+                tfDisp.innerText = currentTimeframe.toUpperCase().replace('MIN', 'M');
+            }
+            else if (tfDisp) tfDisp.innerText = '---';
         }
     } catch (e) { console.warn("Erro ao carregar do servidor, usando local."); }
 }
@@ -123,7 +126,7 @@ let priceMax = 5020, priceMin = 4980, visibleCandles = 20, horizontalScroll = 0;
 
 let currentTimeframe = localStorage.getItem('zenith_timeframe') || "5Min";
 const rightMargin = 60;
-let isAutoScale = true; 
+let isAutoScale = true;
 let activeTool = 'none', mousePos = { x: 0, y: 0 }, isDrag = false, isDragS = false, isDragT = false, lX = 0, lY = 0, lSY = 0, lTX = 0;
 
 
@@ -151,7 +154,7 @@ function generateMockData() {
 }
 
 // 5. LÓGICA DE DIMENSIONAMENTO
-function resize() { 
+function resize() {
     const dpr = window.devicePixelRatio || 1;
     const w = window.innerWidth - 75;
     const h = window.innerHeight - 75;
@@ -171,7 +174,7 @@ function resize() {
     // Ajustar Caches
     historyCanvasCache.width = canvas.width;
     historyCanvasCache.height = canvas.height;
-    
+
     staticScaleCache.width = scaleCanvas.width;
     staticScaleCache.height = scaleCanvas.height;
     staticTimeCache.width = timeCanvas.width;
@@ -180,7 +183,7 @@ function resize() {
     needsHistoryRedraw = true;
     needsScaleRedraw = true;
 
-    autoScale(); 
+    autoScale();
 }
 
 
@@ -188,11 +191,11 @@ function autoScale() {
     if (!isAutoScale || chartData.length === 0) return;
     const dpr = window.devicePixelRatio || 1;
     const cW = (canvas.width / dpr - rightMargin) / visibleCandles;
-    
+
     // Cálculo de índices visíveis para evitar percorrer o histórico todo (O(Visível))
     let iStart = Math.floor((horizontalScroll - rightMargin) / cW);
     let iEnd = Math.ceil((canvas.width / dpr - rightMargin + horizontalScroll + cW) / cW);
-    
+
     iStart = Math.max(0, iStart);
     iEnd = Math.min(chartData.length - 1, iEnd);
 
@@ -203,11 +206,11 @@ function autoScale() {
         if (c.low < minH) minH = c.low;
     }
 
-    if (minH !== Infinity) { 
+    if (minH !== Infinity) {
         // Aumentado para 30% de margem para forçar o gráfico a abrir mais a escala
-        const r = maxH - minH, p = Math.max(1.0, r * 0.3); 
+        const r = maxH - minH, p = Math.max(1.0, r * 0.3);
         const targetMax = maxH + p, targetMin = minH - p;
-        
+
         priceMax = targetMax; priceMin = targetMin;
         needsHistoryRedraw = true;
         needsScaleRedraw = true;
@@ -217,7 +220,7 @@ function autoScale() {
 // 6. RENDERIZAÇÃO DE ESCALAS
 function drawChevronTag(ctx, y, color, textColor, text, width) {
     const h = 20; ctx.fillStyle = color; ctx.beginPath();
-    ctx.moveTo(0, y); ctx.lineTo(10, y - h/2); ctx.lineTo(width, y - h/2); ctx.lineTo(width, y + h/2); ctx.lineTo(10, y + h/2); ctx.closePath(); ctx.fill();
+    ctx.moveTo(0, y); ctx.lineTo(10, y - h / 2); ctx.lineTo(width, y - h / 2); ctx.lineTo(width, y + h / 2); ctx.lineTo(10, y + h / 2); ctx.closePath(); ctx.fill();
     ctx.fillStyle = textColor; ctx.font = "bold 11px Arial"; ctx.textAlign = "right"; ctx.fillText(text, width - 5, y + 4);
 }
 
@@ -227,14 +230,30 @@ function drawScales(range) {
     const sH = scaleCanvas.height / dpr;
     const tW = timeCanvas.width / dpr;
 
+    // DESENHA OS FUNDOS (LAYOUT) SEMPRE
+    scaleCtx.clearRect(0, 0, sW, sH);
+    scaleCtx.fillStyle = chartBgColor;
+    scaleCtx.fillRect(0, 0, sW, sH);
+
+    timeCtx.clearRect(0, 0, tW, 35);
+    timeCtx.fillStyle = chartBgColor; timeCtx.fillRect(0, 0, tW, 18); // Fundo Horas
+    timeCtx.fillStyle = themeColor; timeCtx.fillRect(0, 18, tW, 17); // Fundo Data
+
+    // TRAVA: Só desenha os NÚMEROS se já tivermos recebido DADOS REAIS do ativo
+    if (!hasRealData) {
+        staticScaleCtx.clearRect(0, 0, staticScaleCache.width, staticScaleCache.height);
+        staticTimeCtx.clearRect(0, 0, staticTimeCache.width, staticTimeCache.height);
+        return;
+    }
+
     if (needsScaleRedraw) {
         // Redesenhar réguas estáticas
         staticScaleCtx.clearRect(0, 0, staticScaleCache.width, staticScaleCache.height);
         staticScaleCtx.save(); staticScaleCtx.scale(dpr, dpr);
         staticScaleCtx.fillStyle = chartBgColor; staticScaleCtx.fillRect(0, 0, sW, sH);
-        
+
         const step = calculatePriceStep(range);
-        
+
         staticScaleCtx.fillStyle = scaleFontColor; staticScaleCtx.font = `${scaleFontSize}px Arial`; staticScaleCtx.textAlign = "right";
         const firstP = Math.ceil(priceMin / step) * step;
         for (let p = firstP; p <= priceMax; p += step) {
@@ -247,10 +266,10 @@ function drawScales(range) {
         staticTimeCtx.save(); staticTimeCtx.scale(dpr, dpr);
         staticTimeCtx.fillStyle = chartBgColor; staticTimeCtx.fillRect(0, 0, tW, 18);
         staticTimeCtx.fillStyle = themeColor; staticTimeCtx.fillRect(0, 18, tW, 17);
-        
+
         const cW = (canvas.width / dpr - rightMargin) / visibleCandles;
         staticTimeCtx.fillStyle = scaleFontColor; staticTimeCtx.font = `${scaleFontSize}px Arial`; staticTimeCtx.textAlign = "center";
-        
+
         let iStart = Math.max(0, Math.floor((horizontalScroll - rightMargin) / cW));
         let iEnd = Math.min(chartData.length - 1, Math.ceil((tW + horizontalScroll) / cW));
         const skip = Math.ceil(60 / cW);
@@ -260,7 +279,7 @@ function drawScales(range) {
                 const x = (canvas.width / dpr - rightMargin) - (i * cW) + horizontalScroll;
                 if (x > 0 && x < tW) {
                     const c = chartData[i];
-                    const label = `${String(c.timestamp.getHours()).padStart(2,'0')}:${String(c.timestamp.getMinutes()).padStart(2,'0')}`;
+                    const label = `${String(c.timestamp.getHours()).padStart(2, '0')}:${String(c.timestamp.getMinutes()).padStart(2, '0')}`;
                     staticTimeCtx.fillText(label, x, 15);
                 }
             }
@@ -268,7 +287,7 @@ function drawScales(range) {
 
         if (chartData[0]) {
             staticTimeCtx.fillStyle = scaleFontColor; staticTimeCtx.font = `bold ${scaleFontSize}px Arial`;
-            const dateStr = `${String(chartData[0].timestamp.getDate()).padStart(2,'0')}/${String(chartData[0].timestamp.getMonth()+1).padStart(2,'0')}`;
+            const dateStr = `${String(chartData[0].timestamp.getDate()).padStart(2, '0')}/${String(chartData[0].timestamp.getMonth() + 1).padStart(2, '0')}`;
             staticTimeCtx.fillText(dateStr, tW / 2, 30);
         }
         staticTimeCtx.restore();
@@ -278,7 +297,7 @@ function drawScales(range) {
     // Renderizar caches no canvas visível
     scaleCtx.clearRect(0, 0, sW, sH);
     scaleCtx.drawImage(staticScaleCache, 0, 0, sW, sH);
-    
+
     // DESENHAR ETIQUETA DE PREÇO ATUAL (CHEVRON)
     const currentPrice = externalLastPrice || (chartData[0] ? chartData[0].close : 0);
     const safeRange = (priceMax - priceMin) || 1; // Evita divisão por zero
@@ -297,11 +316,11 @@ function drawScales(range) {
     if (activeTool === 'cross') {
         const y = mousePos.y, p = priceMax - (y / (canvas.height / dpr)) * range;
         drawChevronTag(scaleCtx, y, "#ffffff", "#000000", priceFormatter.format(p), sW);
-        
+
         const cW = (canvas.width / dpr - rightMargin) / visibleCandles;
         const candleIdx = Math.round(((canvas.width / dpr - rightMargin) - (mousePos.x - horizontalScroll)) / cW);
         if (chartData[candleIdx]) {
-            const hLabel = `${String(chartData[candleIdx].timestamp.getHours()).padStart(2,'0')}:${String(chartData[candleIdx].timestamp.getMinutes()).padStart(2,'0')}`;
+            const hLabel = `${String(chartData[candleIdx].timestamp.getHours()).padStart(2, '0')}:${String(chartData[candleIdx].timestamp.getMinutes()).padStart(2, '0')}`;
             timeCtx.fillStyle = chartBgColor; timeCtx.fillRect(mousePos.x - 25, 0, 50, 18);
             timeCtx.fillStyle = "#ffffff"; timeCtx.font = `bold ${scaleFontSize}px Arial`; timeCtx.textAlign = "center";
             timeCtx.fillText(hLabel, mousePos.x, 13);
@@ -317,7 +336,7 @@ function draw() {
     try {
         const range = Math.max(0.0001, priceMax - priceMin);
         const dpr = window.devicePixelRatio || 1;
-        
+
         // Processar Escala se solicitado
         if (needsAutoScale) {
             autoScale();
@@ -334,30 +353,73 @@ function draw() {
         }
 
         // 2. LIMPAR CANVAS PRINCIPAL
-        ctx.fillStyle = chartBgColor; 
+        ctx.fillStyle = chartBgColor;
         ctx.fillRect(0, 0, canvas.width / dpr, canvas.height / dpr);
-        
-        if (chartData.length === 0) { 
+
+        if (chartData.length === 0) {
             drawScales(range);
-            
+
             // Mensagem de Status
             ctx.fillStyle = "rgba(255,255,255,0.5)";
             ctx.font = "20px Arial";
             ctx.textAlign = "center";
-            
-            let statusText = "Aguardando dados reais do Excel...";
+
+            let statusText = "Aguardando Dados...";
+            let statusColor = "rgba(255,255,255,0.5)";
+
             if (!socket || socket.readyState !== WebSocket.OPEN) {
-                statusText = "❌ DESCONECTADO DO SERVIDOR (Tentando reconectar...)";
-                ctx.fillStyle = "#f23645";
+                statusText = "❌ DESCONECTADO DO SERVIDOR";
+                statusColor = "#f23645";
             } else if (motorStatus === 'off') {
-                statusText = "⏸️ MOTOR DESLIGADO. Clique no botão de Power para iniciar.";
-                ctx.fillStyle = "#ff9800";
+                statusText = "LIGAR POWER";
+                statusColor = "#ffffff"; // Branco
             }
 
-            ctx.fillText(statusText, (canvas.width/dpr - rightMargin)/2, (canvas.height/dpr)/2);
-            
-            requestAnimationFrame(draw); 
-            return; 
+            const centerX = (canvas.width / dpr - rightMargin) / 2;
+            const centerY = (canvas.height / dpr) / 2;
+
+            if (motorStatus === 'off' && socket && socket.readyState === WebSocket.OPEN) {
+                statusText = "Ligar Power";
+                const iconColor = "#089981"; // Verde Zenith
+                const textColor = "#ffffff"; // Branco
+                
+                ctx.font = "bold 26px Arial";
+                const textWidth = ctx.measureText(statusText).width;
+                const iconSize = 24;
+                const gap = 15;
+                const totalWidth = iconSize + gap + textWidth;
+                const startX = centerX - (totalWidth / 2);
+                
+                // 1. DESENHA ÍCONE (VERDE)
+                ctx.save();
+                ctx.strokeStyle = iconColor;
+                ctx.lineWidth = 3.5;
+                ctx.lineCap = "round";
+                const iconX = startX + iconSize/2;
+                
+                ctx.beginPath();
+                ctx.arc(iconX, centerY - 2, iconSize/2, -Math.PI/3.5, Math.PI + Math.PI/3.5);
+                ctx.stroke();
+                
+                ctx.beginPath();
+                ctx.moveTo(iconX, centerY - 2 - iconSize/2);
+                ctx.lineTo(iconX, centerY - 2);
+                ctx.stroke();
+                ctx.restore();
+
+                // 2. DESENHA TEXTO (BRANCO)
+                ctx.fillStyle = textColor;
+                ctx.textAlign = "left";
+                ctx.fillText(statusText, startX + iconSize + gap, centerY + 8);
+            } else {
+                ctx.fillStyle = statusColor;
+                ctx.font = "bold 24px Arial";
+                ctx.textAlign = "center";
+                ctx.fillText(statusText, centerX, centerY);
+            }
+
+            requestAnimationFrame(draw);
+            return;
         }
 
         // 3. DESENHAR HISTÓRICO CACHEADO
@@ -372,24 +434,24 @@ function draw() {
         // 5. LINHA DE PREÇO ATUAL (INFINITA E DINÂMICA)
         const lastP = (externalLastPrice > 0) ? externalLastPrice : currentCandle.close;
         const yL = canvas.height / dpr - ((lastP - priceMin) / range) * (canvas.height / dpr);
-        
+
         if (yL >= 0 && yL <= canvas.height / dpr) {
             ctx.save();
-            ctx.strokeStyle = lastPriceLineColor || themeColor; 
-            ctx.lineWidth = 1; 
+            ctx.strokeStyle = lastPriceLineColor || themeColor;
+            ctx.lineWidth = 1;
             ctx.setLineDash([5, 5]);
             ctx.beginPath();
             // Começa no centro da vela atual e vai até a régua de preço
             const startX = (canvas.width / dpr - rightMargin) + horizontalScroll + (cW * 0.5);
-            ctx.moveTo(startX, yL); 
-            ctx.lineTo(canvas.width / dpr, yL); 
+            ctx.moveTo(startX, yL);
+            ctx.lineTo(canvas.width / dpr, yL);
             ctx.stroke();
             ctx.restore();
         }
 
 
         drawScales(range);
-        
+
         // 6. Camada de Interação (Mira e Tooltip) - Apenas se houver movimento recente
         if (Date.now() - lastMouseMove < 2000) {
             drawInteractionLayers(range, cW, dpr);
@@ -401,16 +463,16 @@ function draw() {
 
 function drawInteractionLayers(range, cW, dpr) {
     // Mira (Crosshair)
-    if (activeTool === 'cross') { 
-        ctx.strokeStyle = "rgba(255,255,255,0.2)"; 
-        ctx.setLineDash([5,5]); 
-        ctx.beginPath(); 
-        ctx.moveTo(mousePos.x, 0); ctx.lineTo(mousePos.x, canvas.height / dpr); 
-        ctx.moveTo(0, mousePos.y); ctx.lineTo(canvas.width / dpr, mousePos.y); 
-        ctx.stroke(); 
-        ctx.setLineDash([]); 
+    if (activeTool === 'cross') {
+        ctx.strokeStyle = "rgba(255,255,255,0.2)";
+        ctx.setLineDash([5, 5]);
+        ctx.beginPath();
+        ctx.moveTo(mousePos.x, 0); ctx.lineTo(mousePos.x, canvas.height / dpr);
+        ctx.moveTo(0, mousePos.y); ctx.lineTo(canvas.width / dpr, mousePos.y);
+        ctx.stroke();
+        ctx.setLineDash([]);
     }
-    
+
     // Lógica do Tooltip (Movida para cá para economizar processamento)
     processTooltip(range, cW, dpr);
 }
@@ -426,7 +488,7 @@ function processTooltip(range, cW, dpr) {
         const yH = canvas.height / dpr - ((c.high - priceMin) / range) * (canvas.height / dpr);
         const yL = canvas.height / dpr - ((c.low - priceMin) / range) * (canvas.height / dpr);
 
-        if (Math.abs(mousePos.x - x) < cW/2 && mousePos.x < (canvas.width/dpr - rightMargin) && mousePos.y >= yH && mousePos.y <= yL) {
+        if (Math.abs(mousePos.x - x) < cW / 2 && mousePos.x < (canvas.width / dpr - rightMargin) && mousePos.y >= yH && mousePos.y <= yL) {
             hoveredCandle = c; break;
         }
     }
@@ -462,8 +524,8 @@ function renderHistoryToCache(range, cW, tickH) {
     // Otimização O(Visível)
     let iStart = Math.floor((horizontalScroll - rightMargin) / cW);
     let iEnd = Math.ceil((canvasW - rightMargin + horizontalScroll + cW) / cW);
-    
-    iStart = Math.max(1, iStart); 
+
+    iStart = Math.max(1, iStart);
     iEnd = Math.min(chartData.length - 1, iEnd);
 
     // Desenha do mais antigo para o mais novo (dentro do intervalo visível) para manter ordem lógica
@@ -489,8 +551,8 @@ function drawSingleCandle(targetCtx, c, i, range, cW, tickH) {
     const uW = cW * 0.90, bW = uW * 0.55, mBW = uW * 0.25;
 
     targetCtx.beginPath();
-    targetCtx.strokeStyle = c.close >= c.open ? posOutlineColor : negOutlineColor; targetCtx.lineWidth = 1.5; 
-    targetCtx.strokeRect(x - uW/2, Math.min(yO, yC), uW, Math.max(1, Math.abs(yC - yO)));
+    targetCtx.strokeStyle = c.close >= c.open ? posOutlineColor : negOutlineColor; targetCtx.lineWidth = 1.5;
+    targetCtx.strokeRect(x - uW / 2, Math.min(yO, yC), uW, Math.max(1, Math.abs(yC - yO)));
     targetCtx.stroke();
 
     if (!c.maxV) {
@@ -508,46 +570,63 @@ function drawSingleCandle(targetCtx, c, i, range, cW, tickH) {
         const t = c.ticks[pS], y = canvas.height / (window.devicePixelRatio || 1) - ((pNum - priceMin) / range) * (canvas.height / (window.devicePixelRatio || 1));
         const s = t.buy - t.sell;
 
-        filters.forEach(f => { 
-            if (Math.abs(s) >= f.balance) { 
-                targetCtx.fillStyle = hexToRgba(f.color, f.opacity); 
-                targetCtx.fillRect(x - bW/2 + 2, y - tickH/4, bW/4 - 2, tickH/2); 
-            } 
+        filters.forEach(f => {
+            if (Math.abs(s) >= f.balance) {
+                targetCtx.fillStyle = hexToRgba(f.color, f.opacity);
+                targetCtx.fillRect(x - bW / 2 + 2, y - tickH / 4, bW / 4 - 2, tickH / 2);
+            }
         });
 
         const boxH = Math.max(1, Math.floor(tickH) - 2);
-        const startY = Math.round(y - tickH/2) + 1;
-        targetCtx.fillStyle = footprintBgColor; 
-        targetCtx.fillRect(Math.round(x - bW/4), startY, Math.round(bW/2), boxH);
+        const startY = Math.round(y - tickH / 2) + 1;
+        targetCtx.fillStyle = footprintBgColor;
+        targetCtx.fillRect(Math.round(x - bW / 4), startY, Math.round(bW / 2), boxH);
 
         const isPosLevel = s >= 0; // CORRIGIDO: Agora usa o Saldo (Delta) para decidir a cor
-        targetCtx.fillStyle = isPosLevel ? hexToRgba(posColor, 100) : hexToRgba(negColor, 100); 
-        targetCtx.fillRect(Math.round(x + bW/4), Math.round(y - tickH/4), Math.round(((t.buy+t.sell)/c.maxV)*mBW), Math.round(tickH/2));
+        targetCtx.fillStyle = isPosLevel ? hexToRgba(posColor, 100) : hexToRgba(negColor, 100);
+        targetCtx.fillRect(Math.round(x + bW / 4), Math.round(y - tickH / 4), Math.round(((t.buy + t.sell) / c.maxV) * mBW), Math.round(tickH / 2));
 
         if (tickH > 8 && cW > 30) {
             // Saldo (Delta) à esquerda
-            targetCtx.fillStyle = isPosLevel ? posColor : negColor; 
-            targetCtx.textAlign = "right"; 
-            targetCtx.fillText(s, Math.round(x - (bW/4) - 6), Math.round(y + 4));
-            
+            targetCtx.fillStyle = isPosLevel ? posColor : negColor;
+            targetCtx.textAlign = "right";
+            targetCtx.fillText(s, Math.round(x - (bW / 4) - 6), Math.round(y + 4));
+
             // Volume Total ao centro
-            targetCtx.fillStyle = footprintFontColor; 
-            targetCtx.textAlign = "center"; 
+            targetCtx.fillStyle = footprintFontColor;
+            targetCtx.textAlign = "center";
             targetCtx.fillText(t.buy + t.sell, Math.round(x), Math.round(y + 4));
         }
     }
 }
 
 // 8. INTERATIVIDADE E UI
-canvas.onwheel = (e) => { e.preventDefault(); visibleCandles *= (e.deltaY > 0 ? 1.1 : 0.9); visibleCandles = Math.min(100, Math.max(1, visibleCandles)); needsHistoryRedraw = true; needsScaleRedraw = true; }, { passive: false };
-canvas.onmousemove = (e) => { const rect = canvas.getBoundingClientRect(); mousePos.x = e.clientX - rect.left; mousePos.y = e.clientY - rect.top; if (isDrag) { const dX = e.clientX - lX, dY = e.clientY - lY; lX = e.clientX; lY = e.clientY; horizontalScroll += dX; if (Math.abs(dY) > 2) isAutoScale = false; const r = priceMax - priceMin; priceMax += (dY/canvas.height)*r; priceMin += (dY/canvas.height)*r; needsHistoryRedraw = true; needsScaleRedraw = true; } };
+canvas.onwheel = (e) => {
+    e.preventDefault();
+    const dpr = window.devicePixelRatio || 1;
+    const cW = (canvas.width / dpr - rightMargin) / visibleCandles;
+
+    if (activeTool === 'hand') {
+        // MÃO SELECIONADA: ZOOM (Abre/Fecha Escala)
+        visibleCandles *= (e.deltaY > 0 ? 1.1 : 0.9);
+        visibleCandles = Math.min(100, Math.max(1, visibleCandles));
+    } else {
+        // MIRA OU PADRÃO: SCROLL (Move para frente/trás)
+        const scrollSpeed = cW * 2; // Move 2 velas por "clique" do scroll
+        horizontalScroll += (e.deltaY > 0 ? -scrollSpeed : scrollSpeed);
+    }
+
+    needsHistoryRedraw = true;
+    needsScaleRedraw = true;
+}, { passive: false };
+canvas.onmousemove = (e) => { const rect = canvas.getBoundingClientRect(); mousePos.x = e.clientX - rect.left; mousePos.y = e.clientY - rect.top; if (isDrag) { const dX = e.clientX - lX, dY = e.clientY - lY; lX = e.clientX; lY = e.clientY; horizontalScroll += dX; if (Math.abs(dY) > 2) isAutoScale = false; const r = priceMax - priceMin; priceMax += (dY / canvas.height) * r; priceMin += (dY / canvas.height) * r; needsHistoryRedraw = true; needsScaleRedraw = true; } };
 canvas.onmousedown = (e) => { if (isModalOpen()) return; if (activeTool === 'hand') { isDrag = true; lX = e.clientX; lY = e.clientY; canvas.style.cursor = 'grabbing'; } };
 window.onmouseup = () => { isDrag = false; canvas.style.cursor = activeTool === 'hand' ? 'grab' : (activeTool === 'cross' ? 'crosshair' : 'default'); };
 scaleCanvas.onmousedown = (e) => { if (isModalOpen()) return; isDragS = true; lSY = e.clientY; };
-window.addEventListener('mousemove', (e) => { 
-    if (isDragS) { 
+window.addEventListener('mousemove', (e) => {
+    if (isDragS) {
         isAutoScale = false; const dY = lSY - e.clientY; lSY = e.clientY; const r = priceMax - priceMin, f = dY * (r / scaleCanvas.height); priceMax += f; priceMin -= f; needsHistoryRedraw = true; needsScaleRedraw = true;
-    } 
+    }
     if (isDragT) {
         const dX = e.clientX - lTX; lTX = e.clientX;
         const f = dX * (visibleCandles / (timeCanvas.width * 0.5)); // Sensibilidade ajustada
@@ -592,7 +671,7 @@ function syncInputsToState() {
 
 
 
-    
+
     // Atualizar as pré-visualizações visuais (círculos)
     document.querySelectorAll('.custom-color-picker').forEach(picker => {
         const input = picker.querySelector('input[type="color"]');
@@ -603,7 +682,7 @@ function syncInputsToState() {
     });
 }
 
-document.getElementById('tool-settings').onclick = () => { 
+document.getElementById('tool-settings').onclick = () => {
     syncInputsToState();
     // Resetar para aba Geral ao abrir
     document.querySelectorAll('.nav-tab').forEach(t => t.classList.remove('active'));
@@ -618,11 +697,11 @@ document.getElementById('tool-settings').onclick = () => {
 
     // Iniciar memória temporária (staging)
     tempSettings = {
-        chartBgColor, themeColor, lastPriceBgColor, lastPriceLineColor, posColor, negColor, 
+        chartBgColor, themeColor, lastPriceBgColor, lastPriceLineColor, posColor, negColor,
         posOutlineColor, negOutlineColor, scaleFontSize, scaleFontColor, footprintBgColor, footprintFontColor
     };
-    
-    settingsOverlay.classList.add('active'); 
+
+    settingsOverlay.classList.add('active');
 };
 
 
@@ -644,7 +723,7 @@ document.getElementById('tool-hand').onclick = () => { activeTool = activeTool =
 document.getElementById('tool-search').onclick = () => { searchOverlay.classList.add('active'); searchInput.value = ''; searchInput.focus(); };
 document.getElementById('tool-zoom-in').onclick = () => { visibleCandles *= 0.8; if (visibleCandles < 1) visibleCandles = 1; autoScale(); };
 document.getElementById('tool-zoom-out').onclick = () => { visibleCandles *= 1.2; if (visibleCandles > 100) visibleCandles = 100; autoScale(); };
-document.getElementById('conn-status').onclick = function() { this.classList.toggle('on'); this.classList.toggle('off'); };
+document.getElementById('conn-status').onclick = function () { this.classList.toggle('on'); this.classList.toggle('off'); };
 // Sincronização em tempo real e salvamento individual
 function updatePickerUI(input) {
     const parent = input.closest('.custom-color-picker');
@@ -656,19 +735,19 @@ function updatePickerUI(input) {
     }
 }
 
-document.getElementById('input-chart-bg').oninput = function() { tempSettings.chartBgColor = this.value; updatePickerUI(this); };
-document.getElementById('input-theme-bg').oninput = function() { tempSettings.themeColor = this.value; updatePickerUI(this); };
-document.getElementById('input-pos-color').oninput = function() { tempSettings.posColor = this.value; updatePickerUI(this); };
+document.getElementById('input-chart-bg').oninput = function () { tempSettings.chartBgColor = this.value; updatePickerUI(this); };
+document.getElementById('input-theme-bg').oninput = function () { tempSettings.themeColor = this.value; updatePickerUI(this); };
+document.getElementById('input-pos-color').oninput = function () { tempSettings.posColor = this.value; updatePickerUI(this); };
 
-document.getElementById('input-neg-color').oninput = function() { tempSettings.negColor = this.value; updatePickerUI(this); };
-document.getElementById('input-pos-outline').oninput = function() { tempSettings.posOutlineColor = this.value; updatePickerUI(this); };
-document.getElementById('input-neg-outline').oninput = function() { tempSettings.negOutlineColor = this.value; updatePickerUI(this); };
-document.getElementById('input-font-size').oninput = function() { tempSettings.scaleFontSize = parseInt(this.value); };
-document.getElementById('input-font-color').oninput = function() { tempSettings.scaleFontColor = this.value; updatePickerUI(this); };
-document.getElementById('input-footprint-bg').oninput = function() { tempSettings.footprintBgColor = this.value; updatePickerUI(this); };
-document.getElementById('input-footprint-font-color').oninput = function() { tempSettings.footprintFontColor = this.value; updatePickerUI(this); };
-document.getElementById('input-last-price-bg').oninput = function() { tempSettings.lastPriceBgColor = this.value; updatePickerUI(this); };
-document.getElementById('input-last-price-line').oninput = function() { tempSettings.lastPriceLineColor = this.value; updatePickerUI(this); };
+document.getElementById('input-neg-color').oninput = function () { tempSettings.negColor = this.value; updatePickerUI(this); };
+document.getElementById('input-pos-outline').oninput = function () { tempSettings.posOutlineColor = this.value; updatePickerUI(this); };
+document.getElementById('input-neg-outline').oninput = function () { tempSettings.negOutlineColor = this.value; updatePickerUI(this); };
+document.getElementById('input-font-size').oninput = function () { tempSettings.scaleFontSize = parseInt(this.value); };
+document.getElementById('input-font-color').oninput = function () { tempSettings.scaleFontColor = this.value; updatePickerUI(this); };
+document.getElementById('input-footprint-bg').oninput = function () { tempSettings.footprintBgColor = this.value; updatePickerUI(this); };
+document.getElementById('input-footprint-font-color').oninput = function () { tempSettings.footprintFontColor = this.value; updatePickerUI(this); };
+document.getElementById('input-last-price-bg').oninput = function () { tempSettings.lastPriceBgColor = this.value; updatePickerUI(this); };
+document.getElementById('input-last-price-line').oninput = function () { tempSettings.lastPriceLineColor = this.value; updatePickerUI(this); };
 
 
 
@@ -709,7 +788,7 @@ document.getElementById('confirm-settings').onclick = () => {
 
     // Atualizar visual global (CSS)
     document.documentElement.style.setProperty('--theme-bg', themeColor);
-    
+
     settingsOverlay.classList.remove('active');
     needsHistoryRedraw = true;
     saveSettingsToServer();
@@ -726,13 +805,13 @@ if (searchInput) {
             const val = searchInput.value.trim();
             if (val) {
                 currentTimeframe = val.toUpperCase().endsWith('P') ? val.toLowerCase() : val + "Min";
-                document.getElementById('tf-display').innerText = currentTimeframe.toUpperCase();
-                localStorage.setItem('zenith_timeframe', currentTimeframe); 
-                
+                document.getElementById('tf-display').innerText = currentTimeframe.toUpperCase().replace('MIN', 'M');
+                localStorage.setItem('zenith_timeframe', currentTimeframe);
+
                 // RE-AGREGAÇÃO ULTRA-RÁPIDA (SEM INTERNET)
                 reaggregateChart();
-                
-                searchOverlay.classList.remove('active'); 
+
+                searchOverlay.classList.remove('active');
                 searchInput.value = '';
                 saveSettingsToServer();
                 return;
@@ -804,10 +883,10 @@ if (filterContainer) {
 searchOverlay.onclick = (e) => { if (e.target === searchOverlay) searchOverlay.classList.remove('active'); };
 settingsOverlay.onclick = (e) => { if (e.target === settingsOverlay) settingsOverlay.classList.remove('active'); };
 
-window.addEventListener('keydown', (e) => { 
-    if (e.key === 'Escape') { 
-        settingsOverlay.classList.remove('active'); 
-        searchOverlay.classList.remove('active'); 
+window.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') {
+        settingsOverlay.classList.remove('active');
+        searchOverlay.classList.remove('active');
     }
     // Atalho: Digitar para pesquisar
     if (!isModalOpen() && /^[a-z0-9]$/i.test(e.key)) {
@@ -821,55 +900,89 @@ window.addEventListener('keydown', (e) => {
 function connectMotor() {
 
     if (socket) socket.close();
-    
+
     // Força WSS na nuvem (Render) e WS no local
     const isLocal = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
     const protocol = isLocal ? 'ws:' : 'wss:';
-    const host = window.location.host; 
-    
+    const host = window.location.host;
+
     socket = new WebSocket(`${protocol}//${host}`);
-    
+
     const statusIcon = document.getElementById('conn-status');
-    if (statusIcon) statusIcon.style.color = '#ff9800'; 
-    
-    socket.onopen = () => { 
-        updateMotorUI(); 
+    if (statusIcon) statusIcon.style.color = '#ff9800';
+
+    socket.onopen = () => {
+        updateMotorUI();
     };
 
     socket.onmessage = (e) => {
         try {
             const msg = JSON.parse(e.data);
-            
+
             if (msg.type === 'MOTOR_STATUS') {
                 const wasOff = motorStatus === 'off';
                 motorStatus = msg.running ? 'on' : 'off';
                 setStorage('zenith_motor', motorStatus);
                 updateMotorUI();
-                
+
                 if (!msg.running) {
+                    // Resetar informações visuais ao desligar
+                    const assetElem = document.querySelector('.asset-name');
+                    const varElem = document.getElementById('variation');
+                    const tfElem = document.getElementById('tf-display');
+                    if (assetElem) assetElem.innerHTML = `--- <span id="tf-display">---</span>`;
+                    if (varElem) { varElem.innerText = '---%'; varElem.style.color = '#787b86'; varElem.style.opacity = '0.5'; }
+                    hasRealData = false;
+
                     // Limpeza Remota (Banco de Dados)
                     fetch('/api/trades/clear', { method: 'DELETE' })
-                        .catch(err => {});
+                        .catch(err => { });
                 }
-                
+
                 if (wasOff && msg.running && socket.readyState === WebSocket.OPEN) {
                     socket.send(JSON.stringify({ type: 'GET_HISTORY' }));
                 }
             }
 
-            if (msg.type === 'MARKET_DATA') {
-                // Atualiza o preço vindo da C2
+            if (msg.type === 'MARKET_DATA' || msg.type === 'NEW_TRADES') {
+                // Atualiza o Ativo e Variação vindo do Excel (A2 e H2)
+                if (msg.asset) {
+                    const assetElem = document.querySelector('.asset-name');
+                    if (assetElem) {
+                        const tfLabel = currentTimeframe.toUpperCase().replace('MIN', 'M');
+                        assetElem.innerHTML = `${msg.asset} <span id="tf-display">${tfLabel}</span>`;
+                    }
+                }
+
                 if (msg.lastPrice > 0) {
+                    const isFirstData = !hasRealData;
                     externalLastPrice = msg.lastPrice;
-                    hasRealData = true; // Ativa a exibição do preço
+                    hasRealData = true;
+
+                    // Se for o primeiro dado (F5 ou Motor On), força o ajuste da escala IMEDIATAMENTE
+                    if (isFirstData) {
+                        if (chartData.length === 0) {
+                            // Se não tem velas ainda, centraliza o preço no meio da tela
+                            const initialRange = 40; // Range inicial de 40 pontos
+                            priceMax = externalLastPrice + (initialRange / 2);
+                            priceMin = externalLastPrice - (initialRange / 2);
+                        } else {
+                            autoScale();
+                        }
+                    }
                 }
-                
-                const varElem = document.getElementById('variation');
-                if (varElem) {
-                    varElem.innerText = (msg.variation || 0).toFixed(2) + '%';
-                    varElem.style.color = msg.variation >= 0 ? '#089981' : '#f23645';
+
+                if (msg.variation !== undefined) {
+                    const varElem = document.getElementById('variation');
+                    if (varElem) {
+                        const v = msg.variation || 0;
+                        const sign = v > 0 ? '+' : '';
+                        varElem.innerText = sign + v.toFixed(2) + '%';
+                        varElem.style.color = v >= 0 ? '#089981' : '#f23645';
+                        varElem.style.opacity = '1';
+                    }
                 }
-                
+
                 needsScaleRedraw = true;
             }
 
@@ -877,7 +990,7 @@ function connectMotor() {
                 const list = msg.trades || msg.data || (msg.id ? [msg] : null);
                 if (list && list.length > 0) processTrades(list);
             }
-            
+
             if (msg.type === 'CLEAR_CHART') {
                 chartData = []; chartDataMap.clear(); processedTradeIds.clear(); rawTrades = [];
                 needsHistoryRedraw = true; draw();
@@ -886,15 +999,15 @@ function connectMotor() {
     };
 
     socket.onerror = () => { if (statusIcon) statusIcon.style.color = '#f23645'; };
-    socket.onclose = () => { 
+    socket.onclose = () => {
         if (statusIcon) statusIcon.style.color = '#f23645';
-        if (motorStatus === 'on') setTimeout(connectMotor, 3000); 
+        if (motorStatus === 'on') setTimeout(connectMotor, 3000);
     };
 }
 
 function processTrades(trades) {
     if (!trades || !Array.isArray(trades)) return;
-    
+
     let tfMin = parseInt(currentTimeframe) || 5;
     if (currentTimeframe.toUpperCase().includes('H')) tfMin *= 60;
     if (currentTimeframe.toUpperCase().includes('D')) tfMin *= 1440;
@@ -905,11 +1018,11 @@ function processTrades(trades) {
         // FILTRO DE SEGURANÇA: Ignora trades com preços absurdos (fora do range de 27k)
         if (t.price > 100000) t.price = t.price / 10;
         if (t.price < 5000) return; // Se for menor que 5k, ignora
-        
+
         if (!t.id || processedTradeIds.has(t.id)) return;
         processedTradeIds.add(t.id);
-        rawTrades.push(t); 
-        
+        rawTrades.push(t);
+
         // Limita o cache para evitar consumo excessivo de RAM (Mantém os últimos 15 mil)
         if (rawTrades.length > 15000) {
             const removed = rawTrades.shift();
@@ -918,7 +1031,7 @@ function processTrades(trades) {
 
         const candleTime = Math.floor(t.timestamp / tfMs) * tfMs;
         let candle = chartDataMap.get(candleTime);
-        
+
         if (!candle) {
             candle = {
                 timestamp: new Date(candleTime),
@@ -947,10 +1060,10 @@ function processTrades(trades) {
         chartData.sort((a, b) => b.timestamp - a.timestamp);
         needsHistoryRedraw = true;
         needsScaleRedraw = true;
-        
+
         // FORÇA O PULO PARA O PREÇO REAL (Não deixa as velas escondidas)
         if (chartData.length > 0) {
-            autoScale(); 
+            autoScale();
         }
     }
 }
@@ -961,12 +1074,12 @@ function reaggregateChart() {
     chartDataMap.clear();
     const currentProcessedIds = new Set(processedTradeIds); // Backup
     processedTradeIds.clear(); // Limpa para re-processar
-    
+
     // Processa tudo da memória RAM (sem rede)
     const backupRaw = [...rawTrades];
     rawTrades = [];
     processTrades(backupRaw);
-    
+
     autoScale();
     draw();
 }
@@ -978,7 +1091,7 @@ function updateMotorUI() {
     const btn = document.getElementById('motor-toggle');
     const statusIcon = document.getElementById('conn-status');
     if (!btn) return;
-    
+
     // 1. ATUALIZAÇÃO DO BOTÃO PRINCIPAL (MOTOR)
     if (motorStatus === 'on') {
         btn.classList.add('on');
@@ -986,6 +1099,13 @@ function updateMotorUI() {
     } else {
         btn.classList.add('off');
         btn.classList.remove('on');
+
+        // Resetar informações visuais
+        const assetElem = document.querySelector('.asset-name');
+        const varElem = document.getElementById('variation');
+        if (assetElem) assetElem.innerHTML = `--- <span id="tf-display">---</span>`;
+        if (varElem) { varElem.innerText = '---%'; varElem.style.color = '#787b86'; varElem.style.opacity = '0.5'; }
+        hasRealData = false;
     }
 
     // Ícone de Baixo: Status do Terminal (Conexão com Servidor)
@@ -1006,11 +1126,11 @@ document.addEventListener('click', (e) => {
     const btn = e.target.closest('#motor-toggle');
     if (btn) {
         const newStatus = (motorStatus === 'on') ? 'off' : 'on';
-        
+
         motorStatus = newStatus;
         updateMotorUI();
         setStorage('zenith_motor', motorStatus);
-        
+
         if (socket && socket.readyState === WebSocket.OPEN) {
             socket.send(JSON.stringify({ type: 'TOGGLE_MOTOR' }));
         } else if (newStatus === 'on') {
@@ -1025,11 +1145,15 @@ const shutdownOverlay = document.getElementById('shutdown-overlay');
 
 if (connStatus) {
     connStatus.onclick = () => {
+        if (!confirm("Deseja encerrar todo o sistema Zenith?")) return;
+        
         shutdownOverlay.classList.add('active');
+        document.querySelector('#shutdown-overlay h2').innerText = "SISTEMA ENCERRADO";
+        document.querySelector('#shutdown-overlay p').innerText = "Todos os processos foram finalizados. Você pode fechar esta aba.";
+
         if (socket && socket.readyState === WebSocket.OPEN) {
             socket.send(JSON.stringify({ type: 'SHUTDOWN' }));
         }
-        setTimeout(() => { window.close(); }, 1500);
     };
 }
 
@@ -1038,20 +1162,20 @@ const toolClear = document.getElementById('tool-clear');
 if (toolClear) {
     toolClear.onclick = () => {
         if (!confirm("Deseja realmente LIMPAR tudo? Isso vai resetar o navegador e o banco de dados.")) return;
-        
+
         console.log("🗑️ LIMPANDO TUDO (HARD RESET)...");
         // 1. Limpa Memória Local
         chartData = []; chartDataMap.clear(); processedTradeIds.clear(); rawTrades = [];
-        
+
         // 2. Limpa Cache Visual
         historyCanvasCache.width = historyCanvasCache.width;
         needsHistoryRedraw = true;
         autoScale();
         draw();
-        
+
         // 3. Limpa LocalStorage (Zera as configurações também para garantir)
         localStorage.clear();
-        
+
         // 4. Limpa Banco de Dados Remoto
         fetch('/api/trades/clear', { method: 'DELETE' })
             .then(() => {
@@ -1094,3 +1218,11 @@ function drawChevronTag(ctx, y, color, textColor, text, width) {
     ctx.fillText(text, width / 2 + 3, y + 4);
     ctx.restore();
 }
+
+// INICIALIZAÇÃO FINAL
+loadSettingsFromServer().then(() => {
+    updateMotorUI();
+    if (motorStatus === 'on') connectMotor();
+    resize();
+    draw();
+});

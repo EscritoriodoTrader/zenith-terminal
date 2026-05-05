@@ -1,0 +1,282 @@
+# PLANO MESTRE DO LAYOUT - ZENITH TERMINAL
+
+Este documento contem a auditoria completa de todos os elementos visuais do grafico, incluindo dimensoes, cores, fontes e referencias exatas no codigo (HTML, CSS e JS).
+
+---
+
+1. ABA PRINCIPAL (TOP BAR)
+Estrutura de cabecalho na parte superior da tela.
+
+* Tamanho: Altura de 40px.
+* Cor Padrao: #1c2027 (Variavel --theme-bg).
+* Referencia: index.html:14 | zenith_style.css:24 | zenith_core.js:62.
+
+TRECHO DO CODIGO
+----------------
+HTML:
+<!-- index.html - Linha 14 -->
+<header class="top-bar" id="main-header"> ... </header>
+
+JavaScript:
+// zenith_core.js - Linha 62
+document.documentElement.style.setProperty('--theme-bg', themeColor);
+
+CSS:
+/* zenith_style.css - Linha 24 */
+.top-bar {
+    height: 40px;
+    background: var(--theme-bg);
+}
+
+---
+
+2. INFORMACAO DO ATIVO (ASSET PILL)
+Conteiner que exibe o nome do ativo, timeframe e variacao percentual.
+
+* Tamanho: Altura de 30px.
+* Fonte: 14px (Negrito).
+* Origem Excel: Ativo (A2) e Variacao (H2).
+* Cor Padrao: Fundo #2a3b47, Texto #ffffff.
+* Referencia: index.html:15 | zenith_style.css:34 | zenith_core.js:860.
+
+TRECHO DO CODIGO
+----------------
+HTML:
+<!-- index.html - Linha 15 -->
+<div class="asset-pill">
+    <div class="pill-logo"></div>
+    <span class="asset-name">--- <span id="tf-display">---</span></span>
+    <span id="variation" class="asset-variation">---%</span>
+</div>
+
+JavaScript:
+// zenith_core.js - Linha 860
+if (msg.asset) {
+    assetElem.innerHTML = `${msg.asset} <span id="tf-display">${currentTimeframe}</span>`;
+}
+// Logica de Reset (Linha 995)
+if (motorStatus === 'off') {
+    assetElem.innerHTML = `--- <span id="tf-display">---</span>`;
+    varElem.innerText = '---%';
+}
+
+CSS:
+/* zenith_style.css - Linha 34 */
+.asset-pill {
+    background: #2a3b47;
+    height: 30px;
+}
+
+---
+
+3. BOTAO POWER (MOTOR TOGGLE)
+Controle de ativacao do fluxo de dados.
+
+* Tamanho: Icone de 24px.
+* Cor Padrao: Ligado (Verde #089981) | Desligado (Vermelho #f23645).
+* Referencia: index.html:24 | zenith_style.css:89.
+
+TRECHO DO CODIGO
+----------------
+HTML:
+<!-- index.html - Linha 24 -->
+<button id="motor-toggle" class="motor-btn off"> ... </button>
+
+JavaScript:
+// zenith_core.js - Linha 563
+const btn = document.getElementById('motor-toggle');
+btn.className = `motor-btn ${motorStatus}`;
+
+CSS:
+/* zenith_style.css - Linha 89 */
+.motor-btn.on { color: #089981; }
+
+---
+
+4. FUNDO GRAFICO (MAIN CHART)
+Area central onde os candles sao renderizados.
+
+* Tamanho: Dinamico (Resize automatico).
+* Cor Padrao: #131722.
+* Referencia: index.html:81 | zenith_core.js:337.
+
+TRECHO DO CODIGO
+----------------
+HTML:
+<!-- index.html - Linha 81 -->
+<canvas id="chart"></canvas>
+
+JavaScript:
+// zenith_core.js - Linha 337
+ctx.fillStyle = chartBgColor;
+ctx.fillRect(0, 0, canvas.width / dpr, canvas.height / dpr);
+
+CSS:
+/* zenith_style.css - Linha 214 */
+#chart { flex: 1; height: 100%; }
+
+---
+
+5. ESCALA DE PRECO (PRICE SCALE)
+Regua vertical lateral para cotacoes.
+
+* Tamanho: Largura de 75px.
+* Fonte: 12px.
+* Cor Padrao: Texto #787b86.
+* Referencia: index.html:82 | zenith_core.js:163.
+
+TRECHO DO CODIGO
+----------------
+HTML:
+<!-- index.html - Linha 82 -->
+<canvas id="price-scale"></canvas>
+
+JavaScript:
+// zenith_core.js - Linha 163
+scaleCanvas.width = 75 * dpr;
+scaleCanvas.style.width = '75px';
+
+CSS:
+/* zenith_style.css - Linha 219 */
+#price-scale { width: 70px; background: transparent; }
+
+---
+
+6. ESCALA DE TEMPO E DATA (BOTTOM BAR)
+Barra inferior que mostra horas e a data do dia.
+
+* Tamanho: Altura total de 35px.
+* Fonte: 12px.
+* Referencia: index.html:86 | zenith_core.js:248.
+
+TRECHO DO CODIGO
+----------------
+HTML:
+<!-- index.html - Linha 86 -->
+<canvas id="time-scale"></canvas>
+
+JavaScript:
+// zenith_core.js - Linha 248
+staticTimeCtx.fillStyle = chartBgColor;
+staticTimeCtx.fillRect(0, 0, tW, 18);
+
+CSS:
+/* zenith_style.css - Linha 201 */
+.chart-bottom { height: 35px; display: flex; }
+
+---
+
+7. CAIXA DE CANTO (CORNER BOX)
+Area de conexao no canto inferior direito.
+
+* Tamanho: 70px x 35px.
+* Referencia: index.html:87 | zenith_style.css:231.
+
+TRECHO DO CODIGO
+----------------
+HTML:
+<!-- index.html - Linha 87 -->
+<div id="corner-box"> ... </div>
+
+JavaScript:
+// zenith_core.js - Linha 647
+document.getElementById('conn-status').onclick = function() { ... };
+
+CSS:
+/* zenith_style.css - Linha 231 */
+#corner-box { width: 70px; background: var(--theme-bg); }
+
+---
+
+8. BARRA DE FERRAMENTAS (FLOATING TOOLBAR)
+Barra flutuante com os botoes de ferramentas.
+
+* Tamanho: Botoes de 34px.
+* Referencia: index.html:35 | zenith_style.css:259.
+
+TRECHO DO CODIGO
+----------------
+HTML:
+<!-- index.html - Linha 35 -->
+<div class="toolbar-float"> ... </div>
+
+JavaScript:
+// zenith_core.js - Linha 573
+document.querySelectorAll('.tool-btn').forEach(btn => btn.classList.remove('active'));
+
+CSS:
+/* zenith_style.css - Linha 259 */
+.toolbar-float { position: absolute; top: 15px; left: 50%; }
+
+---
+
+9. LUPA DE PESQUISA (SEARCH OVERLAY)
+Interface de busca de ativos.
+
+* Tamanho: Barra de 350px.
+* Fonte: 18px.
+* Referencia: index.html:103 | zenith_style.css:119.
+
+TRECHO DO CODIGO
+----------------
+HTML:
+<!-- index.html - Linha 103 -->
+<div id="search-overlay" class="search-overlay"> ... </div>
+
+JavaScript:
+// zenith_core.js - Linha 644
+document.getElementById('tool-search').onclick = () => { searchOverlay.classList.add('active'); };
+
+CSS:
+/* zenith_style.css - Linha 119 */
+.search-overlay { position: fixed; width: 100vw; height: 100vh; }
+
+---
+
+10. MODAL DE CONFIGURACOES (SETTINGS MODAL)
+Janela de personalizacao do terminal.
+
+* Tamanho: 750px x 500px.
+* Fonte: 22px / 14px.
+* Referencia: index.html:118 | zenith_style.css:307.
+
+TRECHO DO CODIGO
+----------------
+HTML:
+<!-- index.html - Linha 118 -->
+<div id="settings-overlay" class="settings-overlay"> ... </div>
+
+JavaScript:
+// zenith_core.js - Linha 625
+settingsOverlay.classList.add('active');
+
+CSS:
+/* zenith_style.css - Linha 312 */
+.settings-box { width: 750px; height: 500px; }
+
+---
+
+11. CANDLE / FOOTPRINT
+A representacao visual do preco e volume no centro do grafico.
+
+* Tamanho: Largura dinamica (uW) baseada no zoom.
+* Fonte Interna: 12px Arial Bold (Numeros de Volume/Delta).
+* Cor Contorno: Positivo (#089981) | Negativo (#f23645).
+* Referencia: zenith_core.js:485 (Funcao drawSingleCandle).
+
+TRECHO DO CODIGO
+----------------
+HTML:
+<!-- Desenhado dinamicamente dentro do <canvas id="chart"> -->
+
+JavaScript:
+// zenith_core.js - Linha 492
+targetCtx.strokeStyle = c.close >= c.open ? posOutlineColor : negOutlineColor;
+targetCtx.strokeRect(x - uW/2, Math.min(yO, yC), uW, Math.max(1, Math.abs(yC - yO)));
+
+// zenith_core.js - Linha 520 (Fundo dos Numeros)
+targetCtx.fillStyle = footprintBgColor;
+targetCtx.fillRect(Math.round(x - bW/4), startY, Math.round(bW/2), boxH);
+
+CSS:
+/* Nao possui CSS direto, pois e renderizado via Canvas 2D */

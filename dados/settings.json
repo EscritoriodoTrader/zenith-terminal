@@ -1,37 +1,37 @@
 {
-    "chartBgColor": "#333333",
-    "themeColor": "#070a11",
-    "posColor": "#0289f7",
-    "negColor": "#f01927",
-    "currentTimeframe": "1Min",
-    "filters": [
-        {
-            "balance": 50,
-            "color": "#fee2a4",
-            "opacity": 70
-        },
-        {
-            "balance": 100,
-            "color": "#f9cc6c",
-            "opacity": 75
-        },
-        {
-            "balance": 200,
-            "color": "#f5be47",
-            "opacity": 75
-        },
-        {
-            "balance": 500,
-            "color": "#ffb300",
-            "opacity": 80
-        }
-    ],
-    "scaleFontSize": 12,
-    "scaleFontColor": "#ffffff",
-    "footprintBgColor": "#1e222d",
-    "footprintFontColor": "#ffffff",
-    "posOutlineColor": "#59abee",
-    "negOutlineColor": "#e27379",
-    "lastPriceBgColor": "#ff9800",
-    "lastPriceLineColor": "#ff9800"
+  "chartBgColor": "#333333",
+  "themeColor": "#070a11",
+  "posColor": "#0289f7",
+  "negColor": "#f01927",
+  "currentTimeframe": "2Min",
+  "filters": [
+    {
+      "balance": 50,
+      "color": "#fee2a4",
+      "opacity": 70
+    },
+    {
+      "balance": 100,
+      "color": "#f9cc6c",
+      "opacity": 75
+    },
+    {
+      "balance": 200,
+      "color": "#f5be47",
+      "opacity": 75
+    },
+    {
+      "balance": 500,
+      "color": "#ffb300",
+      "opacity": 80
+    }
+  ],
+  "scaleFontSize": 12,
+  "scaleFontColor": "#ffffff",
+  "footprintBgColor": "#1e222d",
+  "footprintFontColor": "#ffffff",
+  "posOutlineColor": "#59abee",
+  "negOutlineColor": "#e27379",
+  "lastPriceBgColor": "#ff9800",
+  "lastPriceLineColor": "#ff9800"
 }

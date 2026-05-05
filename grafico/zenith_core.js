@@ -1147,10 +1147,14 @@ if (connStatus) {
     connStatus.onclick = () => {
         if (!confirm("Deseja encerrar todo o sistema Zenith?")) return;
         
+        // 1. Mostra o Overlay IMEDIATAMENTE
         shutdownOverlay.classList.add('active');
-        document.querySelector('#shutdown-overlay h2').innerText = "SISTEMA ENCERRADO";
-        document.querySelector('#shutdown-overlay p').innerText = "Todos os processos foram finalizados. Você pode fechar esta aba.";
+        const h2 = shutdownOverlay.querySelector('h2');
+        const p = shutdownOverlay.querySelector('p');
+        if (h2) h2.innerText = "SISTEMA ENCERRADO";
+        if (p) p.innerText = "Todos os processos foram finalizados com sucesso.";
 
+        // 2. Envia o comando para o servidor morrer
         if (socket && socket.readyState === WebSocket.OPEN) {
             socket.send(JSON.stringify({ type: 'SHUTDOWN' }));
         }

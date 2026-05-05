@@ -204,18 +204,13 @@ function autoScale() {
     }
 
     if (minH !== Infinity) { 
-        const r = maxH - minH, p = Math.max(0.1, r * 0.15); 
+        // Aumentado para 30% de margem para forçar o gráfico a abrir mais a escala
+        const r = maxH - minH, p = Math.max(1.0, r * 0.3); 
         const targetMax = maxH + p, targetMin = minH - p;
         
-        // AUTO-SCALE PREGUIÇOSO: Só ajusta se a mudança for maior que 1.0 ou se o preço sair da tela
-        const diff = Math.abs(targetMax - priceMax) + Math.abs(targetMin - priceMin);
-        const lastP = chartData[0] ? chartData[0].close : (priceMax + priceMin)/2;
-        
-        if (diff > 1.0 || lastP > priceMax || lastP < priceMin) {
-            priceMax = targetMax; priceMin = targetMin;
-            needsHistoryRedraw = true;
-            needsScaleRedraw = true;
-        }
+        priceMax = targetMax; priceMin = targetMin;
+        needsHistoryRedraw = true;
+        needsScaleRedraw = true;
     }
 }
 
@@ -238,9 +233,7 @@ function drawScales(range) {
         staticScaleCtx.save(); staticScaleCtx.scale(dpr, dpr);
         staticScaleCtx.fillStyle = chartBgColor; staticScaleCtx.fillRect(0, 0, sW, sH);
         
-        const niceSteps = [0.25, 0.5, 1, 2, 5, 10, 25, 50, 100, 250, 500, 1000];
-        const rawStep = range / (sH / 45);
-        const step = niceSteps.find(s => s >= rawStep) || niceSteps[niceSteps.length - 1];
+        const step = calculatePriceStep(range);
         
         staticScaleCtx.fillStyle = scaleFontColor; staticScaleCtx.font = `${scaleFontSize}px Arial`; staticScaleCtx.textAlign = "right";
         const firstP = Math.ceil(priceMin / step) * step;

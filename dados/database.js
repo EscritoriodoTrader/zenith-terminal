@@ -47,11 +47,17 @@ async function initDatabase() {
  * Limpa o banco de dados completamente
  */
 async function clearDatabase() {
+    let client;
     try {
-        await pool.query("TRUNCATE TABLE trades");
-        console.log("[DB]: Banco de dados resetado (TRUNCATE).");
+        client = await pool.connect();
+        const res = await client.query("DELETE FROM trades");
+        console.log(`[DB]: Banco de dados limpo com sucesso. Linhas removidas: ${res.rowCount}`);
+        return true;
     } catch (err) {
-        console.error("[DB ERROR]: Erro ao limpar banco:", err);
+        console.error("[DB ERROR]: Erro crítico ao limpar banco:", err.message);
+        return false;
+    } finally {
+        if (client) client.release();
     }
 }
 

@@ -291,6 +291,20 @@ function drawScales(range) {
     timeCtx.clearRect(0, 0, tW, 35);
     timeCtx.drawImage(staticTimeCache, 0, 0, tW, 35);
 
+    // LINHA DE PREÇO ATUAL INFINITA
+    if (externalLastPrice > 0) {
+        const y = sH - ((externalLastPrice - priceMin) / range) * sH;
+        ctx.save();
+        ctx.setLineDash([5, 5]);
+        ctx.strokeStyle = themeColor; 
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        ctx.moveTo(0, y);
+        ctx.lineTo(tW, y);
+        ctx.stroke();
+        ctx.restore();
+    }
+
     if (activeTool === 'cross') {
         const y = mousePos.y, p = priceMax - (y / (canvas.height / dpr)) * range;
         drawChevronTag(scaleCtx, y, "#ffffff", "#000000", priceFormatter.format(p), sW);

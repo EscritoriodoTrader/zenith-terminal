@@ -35,12 +35,15 @@ def on_message(ws, message):
 
 def start_ws():
     def run():
+        print(f"[WS]: Iniciando conexão com o servidor em {SERVER_HOST}...")
         while True:
             try:
                 ws_url = f"wss://{SERVER_HOST}"
                 ws = websocket.WebSocketApp(ws_url, on_message=on_message)
+                print(f"[WS]: Tentando abrir túnel de dados...")
                 ws.run_forever()
-            except: pass
+            except Exception as e:
+                print(f"[WS]: Erro na conexão: {e}")
             time.sleep(5)
     threading.Thread(target=run, daemon=True).start()
 
@@ -148,9 +151,14 @@ def main():
     last_variation_sent = -999
     historical_loaded = False
     
+    last_wait_log = 0
     while True:
         try:
             if not is_active:
+                if time.time() - last_wait_log > 10:
+                    print("[STATUS]: Aguardando o motor ser ligado no gráfico...")
+                    last_wait_log = time.time()
+                
                 if historical_loaded: # Se estava ligado e agora desligou
                     print("[STATUS]: Motor em STANDBY. Limpando memória local...")
                     sent_trades_buffer.clear()

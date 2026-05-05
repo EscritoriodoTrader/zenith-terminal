@@ -378,21 +378,18 @@ function draw() {
             drawSingleCandle(ctx, currentCandle, 0, range, cW, tickH);
         }
 
-        // 5. LINHA DE PREÇO ATUAL (Sincronia Total com C2)
+        // 5. LINHA DE PREÇO ATUAL (INFINITA E DINÂMICA)
         const lastP = (externalLastPrice > 0) ? externalLastPrice : currentCandle.close;
         const yL = canvas.height / dpr - ((lastP - priceMin) / range) * (canvas.height / dpr);
         
         if (yL >= 0 && yL <= canvas.height / dpr) {
-            // A linha nasce na vela e vai até o fim da tela na direita
-            const startX = (canvas.width / dpr - rightMargin) + horizontalScroll + (cW * 0.5);
-            
             ctx.save();
-            ctx.strokeStyle = lastPriceLineColor; 
+            ctx.strokeStyle = lastPriceLineColor || themeColor; 
             ctx.lineWidth = 1; 
-            ctx.setLineDash([]); 
+            ctx.setLineDash([5, 5]); // Tracejado elegante
             ctx.beginPath();
-            ctx.moveTo(startX, yL); 
-            ctx.lineTo(canvas.width / dpr, yL); 
+            ctx.moveTo(0, yL); // Começa no zero (borda esquerda)
+            ctx.lineTo(canvas.width / dpr, yL); // Vai até o fim (borda direita)
             ctx.stroke();
             ctx.restore();
         }

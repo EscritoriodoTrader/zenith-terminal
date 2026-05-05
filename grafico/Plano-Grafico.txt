@@ -303,3 +303,30 @@ if (!isStudying && (currentP > priceMax || currentP < priceMin)) {
 }
 
 ---
+
+8. ESPECIFICAÇÕES DE LAYOUT (ZENITH v6.8)
+========================================================================
+Padrão estético de alta performance para análise de fluxo.
+
+* ARQUITETURA VERTICAL:
+  - Altura de Tick Fixa: 24px (verticalZoom).
+  - Controle de Zoom Vertical: Ajusta diretamente os pixels por tick na escala.
+  - Sincronia: O range de preço é derivado da altura da célula.
+
+* RENDERIZAÇÃO CONTEXTUAL (DYNAMIC VIEW):
+  - Modo Macro (Longe): cW < 50px -> Desenha corpo preenchido e pavio (Barra).
+  - Modo Micro (Perto): cW >= 50px -> Desenha Footprint (Números/Sinais).
+
+* ESTÉTICA DO FOOTPRINT:
+  - Fonte: bold 10px Arial (Nitidez Máxima).
+  - Espaçamento entre Ticks: 0px (Solid Pillar / Coluna Contínua).
+  - Preenchimento de Gaps: Níveis sem negócio mostram o traço '-'.
+  - Contorno do Candle: 1.0px (Slim Outline).
+
+* SINALIZADORES (SIGNALS):
+  - Altura Fixa: 13px (Centralizado verticalmente).
+  - Largura do Filtro (Big Player): 15px (Rente à caixa central).
+  - Barra de Volume: Largura proporcional ao Max Volume da vela (Máx 25% cW).
+
+------------------------------------------------------------------------
+SISTEMA ZENITH v6.8 - 05/05/2026 (Stability & Aesthetics Edition)

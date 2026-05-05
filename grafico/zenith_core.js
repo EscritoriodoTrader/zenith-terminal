@@ -1,6 +1,6 @@
 /**
- * ZENITH TERMINAL - V3.53
- * RESTAURAÇÃO COMPLETA DE ESCALAS E PONTES DE DADOS
+ * ZENITH TERMINAL - V7.1
+ * ESTABILIDADE TOTAL DE PERSISTÊNCIA E RENDERIZAÇÃO
  */
 
 // 1. CONFIGURAÇÃO E ELEMENTOS
@@ -53,6 +53,7 @@ try {
 let rawTrades = [];
 let processedTradeIds = new Set();
 let tempSettings = {};
+let verticalZoom = 24; // Altura fixa de cada tick (0.25) em pixels
 let motorStatus = getStorage('zenith_motor', 'off');
 let socket;
 
@@ -345,10 +346,16 @@ function draw() {
             needsAutoScale = false;
         }
 
-        // RECALCULAR RANGE APÓS AJUSTE DE ESCALA (Crucial para não sumir com as velas)
-        const range = Math.max(0.0001, priceMax - priceMin);
+        // RECALCULAR RANGE BASEADO NA ALTURA FIXA DO TICK
+        const tickH = verticalZoom;
+        const range = ((canvas.height / dpr) / tickH) * 0.25;
+        
+        // Sincroniza priceMax/Min com o centro atual e o novo range
+        const centerP = (priceMax + priceMin) / 2;
+        priceMax = centerP + (range / 2);
+        priceMin = centerP - (range / 2);
+
         const cW = (canvas.width / dpr - rightMargin) / visibleCandles;
-        const tickH = (0.25 / range) * (canvas.height / dpr);
 
         // AUTO-AJUSTE INTELIGENTE (Flexível: Para se estiver estudando com Mão ou Cruz)
         const isStudying = (activeTool === 'hand' || activeTool === 'cross' || horizontalScroll > 30);
@@ -563,13 +570,48 @@ function appendToHistoryCache(candle, index, range, cW, tickH) {
 }
 
 function drawSingleCandle(targetCtx, c, i, range, cW, tickH) {
-    const x = (canvas.width / (window.devicePixelRatio || 1) - rightMargin) - (i * cW) + horizontalScroll;
-    const yO = canvas.height / (window.devicePixelRatio || 1) - ((c.open - priceMin) / range) * (canvas.height / (window.devicePixelRatio || 1));
-    const yC = canvas.height / (window.devicePixelRatio || 1) - ((c.close - priceMin) / range) * (canvas.height / (window.devicePixelRatio || 1));
-    const uW = cW * 0.90, bW = uW * 0.55, mBW = uW * 0.25;
+    const dpr = window.devicePixelRatio || 1;
+    const canvasH = canvas.height / dpr;
+    const x = (canvas.width / dpr - rightMargin) - (i * cW) + horizontalScroll;
+    
+    // Posições Verticais
+    const yO = canvasH - ((c.open - priceMin) / range) * canvasH;
+    const yC = canvasH - ((c.close - priceMin) / range) * canvasH;
+    const yH = canvasH - ((c.high - priceMin) / range) * canvasH;
+    const yL = canvasH - ((c.low - priceMin) / range) * canvasH;
+    
+    const uW = cW * 0.90;
+    const isBull = c.close >= c.open;
+    const color = isBull ? posOutlineColor : negOutlineColor;
 
+    // --- MODO 1: CANDLE TRADICIONAL (Zoom Longe / cW < 50) ---
+    if (cW < 50) {
+        targetCtx.save();
+        targetCtx.strokeStyle = color;
+        targetCtx.lineWidth = Math.max(1, cW * 0.1);
+        
+        // Desenha o Pavio (Wick)
+        targetCtx.beginPath();
+        targetCtx.moveTo(x, yH);
+        targetCtx.lineTo(x, yL);
+        targetCtx.stroke();
+        
+        // Desenha o Corpo (Body)
+        targetCtx.fillStyle = color;
+        const bodyH = Math.max(1, Math.abs(yC - yO));
+        targetCtx.fillRect(x - uW / 2, Math.min(yO, yC), uW, bodyH);
+        
+        targetCtx.restore();
+        return; // Finaliza aqui para não desenhar os números (Footprint)
+    }
+
+    // --- MODO 2: FOOTPRINT DETALHADO (Zoom Perto / cW >= 50) ---
+    const bW = uW * 0.55, mBW = uW * 0.25;
+
+    // Borda da Vela (Afinada para 1.0)
     targetCtx.beginPath();
-    targetCtx.strokeStyle = c.close >= c.open ? posOutlineColor : negOutlineColor; targetCtx.lineWidth = 1.5;
+    targetCtx.strokeStyle = color; 
+    targetCtx.lineWidth = 1.0;
     targetCtx.strokeRect(x - uW / 2, Math.min(yO, yC), uW, Math.max(1, Math.abs(yC - yO)));
     targetCtx.stroke();
 
@@ -578,42 +620,58 @@ function drawSingleCandle(targetCtx, c, i, range, cW, tickH) {
         c.maxV = mv;
     }
 
-    targetCtx.font = "bold 12px Arial";
+    targetCtx.font = "bold 10px Arial"; // Negrito para garantir nitidez máxima
     targetCtx.textAlign = "center";
+    targetCtx.textBaseline = "middle"; 
 
-    for (let pS in c.ticks) {
-        const pNum = parseFloat(pS);
+    // LOOP POR TODOS OS NÍVEIS DE PREÇO (Evita buracos no candle)
+    for (let pNum = c.low; pNum <= c.high + 0.01; pNum += 0.25) {
         if (pNum < priceMin - 0.5 || pNum > priceMax + 0.5) continue;
 
-        const t = c.ticks[pS], y = canvas.height / (window.devicePixelRatio || 1) - ((pNum - priceMin) / range) * (canvas.height / (window.devicePixelRatio || 1));
+        const pS = pNum.toFixed(2);
+        const t = c.ticks[pS] || { buy: 0, sell: 0 }; // Se não existe, cria um fake com zero
+        const y = canvasH - ((pNum - priceMin) / range) * canvasH;
         const s = t.buy - t.sell;
 
-        filters.forEach(f => {
-            if (Math.abs(s) >= f.balance) {
-                targetCtx.fillStyle = hexToRgba(f.color, f.opacity);
-                targetCtx.fillRect(x - bW / 2 + 2, y - tickH / 4, bW / 4 - 2, tickH / 2);
-            }
-        });
+        // Filtros (Big Players) - Só desenha se houver saldo real
+        if (t.buy + t.sell > 0) {
+            filters.forEach(f => {
+                if (Math.abs(s) >= f.balance) {
+                    targetCtx.fillStyle = hexToRgba(f.color, f.opacity);
+                    targetCtx.fillRect(Math.round(x - bW / 4) - 15, y - 6.5, 15, 13);
+                }
+            });
+        }
 
-        const boxH = Math.max(1, Math.floor(tickH) - 2);
-        const startY = Math.round(y - tickH / 2) + 1;
+        const boxH = Math.max(1, tickH); 
+        const startY = y - tickH / 2;    
         targetCtx.fillStyle = footprintBgColor;
         targetCtx.fillRect(Math.round(x - bW / 4), startY, Math.round(bW / 2), boxH);
 
-        const isPosLevel = s >= 0; // CORRIGIDO: Agora usa o Saldo (Delta) para decidir a cor
-        targetCtx.fillStyle = isPosLevel ? hexToRgba(posColor, 100) : hexToRgba(negColor, 100);
-        targetCtx.fillRect(Math.round(x + bW / 4), Math.round(y - tickH / 4), Math.round(((t.buy + t.sell) / c.maxV) * mBW), Math.round(tickH / 2));
+        if (t.buy + t.sell > 0) {
+            const isPosLevel = s >= 0;
+            targetCtx.fillStyle = isPosLevel ? hexToRgba(posColor, 100) : hexToRgba(negColor, 100);
+            targetCtx.fillRect(Math.round(x + bW / 4), Math.round(y - 6.5), Math.round(((t.buy + t.sell) / c.maxV) * mBW), 13);
+        }
 
-        if (tickH > 8 && cW > 30) {
-            // Saldo (Delta) à esquerda
-            targetCtx.fillStyle = isPosLevel ? posColor : negColor;
-            targetCtx.textAlign = "right";
-            targetCtx.fillText(s, Math.round(x - (bW / 4) - 6), Math.round(y + 4));
+        if (tickH > 14) {
+            if (t.buy + t.sell > 0) {
+                const isPosLevel = s >= 0;
+                // Saldo (Delta) à esquerda
+                targetCtx.fillStyle = isPosLevel ? posColor : negColor;
+                targetCtx.textAlign = "right";
+                targetCtx.fillText(s, Math.round(x - (bW / 4) - 6), Math.round(y));
 
-            // Volume Total ao centro
-            targetCtx.fillStyle = footprintFontColor;
-            targetCtx.textAlign = "center";
-            targetCtx.fillText(t.buy + t.sell, Math.round(x), Math.round(y + 4));
+                // Volume Total ao centro
+                targetCtx.fillStyle = footprintFontColor;
+                targetCtx.textAlign = "center";
+                targetCtx.fillText(t.buy + t.sell, Math.round(x), Math.round(y));
+            } else {
+                // Nível sem negociação: Desenha apenas o traço
+                targetCtx.fillStyle = "rgba(255,255,255,0.2)";
+                targetCtx.textAlign = "center";
+                targetCtx.fillText("-", Math.round(x), Math.round(y));
+            }
         }
     }
 }
@@ -643,7 +701,16 @@ window.onmouseup = () => { isDrag = false; canvas.style.cursor = activeTool === 
 scaleCanvas.onmousedown = (e) => { if (isModalOpen()) return; isDragS = true; lSY = e.clientY; };
 window.addEventListener('mousemove', (e) => {
     if (isDragS) {
-        isAutoScale = false; const dY = lSY - e.clientY; lSY = e.clientY; const r = priceMax - priceMin, f = dY * (r / scaleCanvas.height); priceMax += f; priceMin -= f; needsHistoryRedraw = true; needsScaleRedraw = true;
+        isAutoScale = false; 
+        const dY = lSY - e.clientY; 
+        lSY = e.clientY;
+        
+        // No modo fixo, arrastar a escala muda o TAMANHO da caixa (Zoom)
+        verticalZoom += dY * 0.1;
+        verticalZoom = Math.min(100, Math.max(5, verticalZoom));
+        
+        needsHistoryRedraw = true; 
+        needsScaleRedraw = true;
     }
     if (isDragT) {
         const dX = e.clientX - lTX; lTX = e.clientX;
@@ -966,14 +1033,9 @@ function connectMotor() {
                     // Resetar informações visuais ao desligar
                     const assetElem = document.querySelector('.asset-name');
                     const varElem = document.getElementById('variation');
-                    const tfElem = document.getElementById('tf-display');
                     if (assetElem) assetElem.innerHTML = `--- <span id="tf-display">---</span>`;
                     if (varElem) { varElem.innerText = '---%'; varElem.style.color = '#787b86'; varElem.style.opacity = '0.5'; }
-                    hasRealData = false;
-
-                    // Limpeza Remota (Banco de Dados)
-                    fetch('/api/trades/clear', { method: 'DELETE' })
-                        .catch(err => { });
+                    // hasRealData = false; // Removido para manter o histórico visível no F5
                 }
 
                 if (wasOff && msg.running && socket.readyState === WebSocket.OPEN) {
@@ -1024,7 +1086,29 @@ function connectMotor() {
                 needsScaleRedraw = true;
             }
 
-            if (msg.type === 'HISTORICAL_TRADES' || msg.type === 'HISTORY_DATA' || msg.type === 'NEW_TRADES' || msg.type === 'NEW_TRADE' || msg.type === 'NEW_DATA') {
+            if (msg.type === 'HISTORICAL_TRADES' || msg.type === 'HISTORY_DATA') {
+                // Limpa o estado local para receber o histórico puro do banco
+                chartData = []; 
+                chartDataMap.clear(); 
+                processedTradeIds.clear(); 
+                rawTrades = [];
+                
+                const list = msg.trades || msg.data;
+                if (list && list.length > 0) {
+                    hasRealData = true; // Avisa o sistema que já temos preço real para escalar
+                    processTrades(list);
+                    // Ordena o histórico por tempo para garantir o fluxo
+                    chartData.sort((a, b) => a.timestamp - b.timestamp);
+                    
+                    // Força o auto-ajuste para encontrar os candles históricos no preço
+                    needsAutoScale = true;
+                    isAutoScale = true;
+                }
+                needsHistoryRedraw = true;
+                draw();
+            }
+
+            if (msg.type === 'NEW_TRADES' || msg.type === 'NEW_TRADE' || msg.type === 'NEW_DATA') {
                 const list = msg.trades || msg.data || (msg.id ? [msg] : null);
                 if (list && list.length > 0) processTrades(list);
             }
@@ -1136,12 +1220,11 @@ function updateMotorUI() {
         btn.classList.add('off');
         btn.classList.remove('on');
 
-        // Resetar informações visuais
+        // Resetar informações visuais (Mas MANTER hasRealData como true se houver histórico)
         const assetElem = document.querySelector('.asset-name');
         const varElem = document.getElementById('variation');
         if (assetElem) assetElem.innerHTML = `--- <span id="tf-display">---</span>`;
         if (varElem) { varElem.innerText = '---%'; varElem.style.color = '#787b86'; varElem.style.opacity = '0.5'; }
-        hasRealData = false;
     }
 
     // O ícone de status (rádio) agora é gerenciado 100% pelos eventos do WebSocket (onopen, onclose, etc)
@@ -1235,15 +1318,25 @@ if (toolClear) {
 // 11. UTILITÁRIOS DE CÁLCULO E DESENHO
 function calculatePriceStep(range) {
     if (!range || range <= 0) return 0.25;
-    const targetTicks = 10;
+    
+    // Alvo de aproximadamente 15 a 20 ticks na tela para maior detalhamento
+    const targetTicks = 18; 
     let step = range / targetTicks;
+    
+    // Se o passo calculado for próximo de 0.25, força o 0.25
+    if (step <= 0.40) return 0.25;
+    if (step <= 0.80) return 0.50;
+    if (step <= 1.50) return 1.00;
+
     const magnitude = Math.pow(10, Math.floor(Math.log10(step)));
     const res = step / magnitude;
+    
     if (res > 5) step = 10 * magnitude;
     else if (res > 2) step = 5 * magnitude;
     else if (res > 1) step = 2 * magnitude;
     else step = magnitude;
-    return Math.max(0.25, step); // Mínimo de 0.25 para Nasdaq
+    
+    return Math.max(0.25, step);
 }
 
 function drawChevronTag(ctx, y, color, textColor, text, width) {

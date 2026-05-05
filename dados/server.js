@@ -59,13 +59,18 @@ wss.on('connection', async (ws, req) => {
         }
     }
 
-    ws.on('message', (message) => {
+    ws.on('message', async (message) => {
         try {
             const cmd = JSON.parse(message);
             if (cmd.type === 'SHUTDOWN') {
                 console.log("[WS]: Comando de desligamento recebido.");
                 try { if (process.platform === "win32") execSync('taskkill /F /IM python.exe', { stdio: 'ignore' }); } catch (e) {}
                 process.exit(0);
+            } else if (cmd.type === 'GET_HISTORY') {
+                // Resposta direta ao pedido de histórico
+                console.log("[WS]: Enviando histórico solicitado pelo terminal.");
+                const history = await db.getTrades();
+                ws.send(JSON.stringify({ type: 'HISTORY_DATA', data: history }));
             } else {
                 broadcast(cmd);
             }
@@ -76,6 +81,9 @@ wss.on('connection', async (ws, req) => {
 // Rotas API
 app.get('/api/settings', (req, res) => res.json(getSettings()));
 app.post('/api/settings', (req, res) => { saveSettings(req.body); res.sendStatus(200); });
+
+// Rota de Identidade para Auditoria de Versão
+app.get('/api/identidade', (req, res) => res.send("VERSAO_7.1_AUDITADA"));
 
 // Rota de Trades: Salva no banco e faz broadcast
 app.post('/api/trades', async (req, res) => {

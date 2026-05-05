@@ -839,14 +839,7 @@ function connectMotor() {
     socket.onmessage = (e) => {
         try {
             const msg = JSON.parse(e.data);
-            if (msg.type === 'CLEAR_CHART') {
-                console.log("🧹 Comando de limpeza recebido. Reiniciando gráfico...");
-                chartData = [];
-                chartDataMap.clear();
-                processedTradeIds.clear();
-                needsHistoryRedraw = true;
-                needsScaleRedraw = true;
-                return;
+            
             if (msg.type === 'MOTOR_STATUS') {
                 const wasOff = motorStatus === 'off';
                 motorStatus = msg.running ? 'on' : 'off';

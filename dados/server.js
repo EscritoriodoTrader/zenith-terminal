@@ -65,6 +65,11 @@ app.delete('/api/trades/clear', async (req, res) => {
 });
 
 app.post('/api/trades', async (req, res) => {
+    // Portão de Ferro: Se o motor estiver desligado, descarta os dados
+    if (!isMotorRunning) {
+        return res.status(200).send("Motor OFF - Dados descartados");
+    }
+
     const { trades, last_price, variation } = req.body;
 
     broadcast({
@@ -99,6 +104,12 @@ wss.on('connection', async (ws) => {
             if (cmd.type === 'TOGGLE_MOTOR') {
                 isMotorRunning = !isMotorRunning;
                 broadcast({ type: 'MOTOR_STATUS', running: isMotorRunning });
+                
+                // Se parou o motor, limpa o banco imediatamente (Segurança Extra)
+                if (!isMotorRunning) {
+                    console.log("🧹 Motor desligado pelo usuário. Limpando banco de dados...");
+                    await db.clearDatabase();
+                }
             }
             if (cmd.type === 'GET_HISTORY') {
                 const h = await db.getTrades();

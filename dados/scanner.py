@@ -123,11 +123,18 @@ def process_time(val, now):
 
 def clean_price(val):
     try:
-        if isinstance(val, (float, int)): return float(val)
-        s = str(val).strip().replace(' ', '')
-        if ',' in s and '.' in s: s = s.replace('.', '').replace(',', '.')
-        elif ',' in s: s = s.replace(',', '.')
-        return float(s)
+        if isinstance(val, (float, int)): 
+            n = float(val)
+        else:
+            s = str(val).strip().replace(' ', '')
+            if ',' in s and '.' in s: s = s.replace('.', '').replace(',', '.')
+            elif ',' in s: s = s.replace(',', '.')
+            n = float(s)
+        
+        # AJUSTE NASDAC: Se o número vier como 278375 (sem ponto), 
+        # ele vira 27837.5 automaticamente.
+        if n > 100000: n = n / 10.0
+        return n
     except: return 0.0
 
 def read_historical_data(sent_buffer):

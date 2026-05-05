@@ -285,7 +285,8 @@ function drawScales(range) {
     if (currentPrice > 0) {
         const y = sH - ((currentPrice - priceMin) / safeRange) * sH;
         if (y >= 0 && y <= sH) {
-            drawChevronTag(scaleCtx, y, themeColor, "#000", priceFormatter.format(currentPrice), sW);
+            // Agora usa a cor configurada "Fundo Preço Atual" e cor de fonte branca para contraste
+            drawChevronTag(scaleCtx, y, lastPriceBgColor, "#ffffff", priceFormatter.format(currentPrice), sW);
         }
     }
 

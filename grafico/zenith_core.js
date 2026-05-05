@@ -279,7 +279,7 @@ function drawScales(range) {
     scaleCtx.clearRect(0, 0, sW, sH);
     scaleCtx.drawImage(staticScaleCache, 0, 0, sW, sH);
     
-    // DESENHAR ETIQUETA DE PREÇO ATUAL (Vindo da C2 ou da última vela)
+    // DESENHAR ETIQUETA DE PREÇO ATUAL (CHEVRON)
     const currentPrice = externalLastPrice || (chartData[0] ? chartData[0].close : 0);
     if (currentPrice > 0) {
         const y = sH - ((currentPrice - priceMin) / (priceMax - priceMin)) * sH;
@@ -291,17 +291,14 @@ function drawScales(range) {
     timeCtx.clearRect(0, 0, tW, 35);
     timeCtx.drawImage(staticTimeCache, 0, 0, tW, 35);
 
-    // LINHA DE PREÇO ATUAL INFINITA
-    if (externalLastPrice > 0) {
-        const y = sH - ((externalLastPrice - priceMin) / range) * sH;
+    // LINHA DE PREÇO ATUAL INFINITA (Estilo TradingView)
+    if (currentPrice > 0) {
+        const y = sH - ((currentPrice - priceMin) / (priceMax - priceMin)) * sH;
         ctx.save();
         ctx.setLineDash([5, 5]);
         ctx.strokeStyle = themeColor; 
         ctx.lineWidth = 1;
-        ctx.beginPath();
-        ctx.moveTo(0, y);
-        ctx.lineTo(tW, y);
-        ctx.stroke();
+        ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(canvas.width, y); ctx.stroke();
         ctx.restore();
     }
 

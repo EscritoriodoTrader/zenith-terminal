@@ -121,6 +121,15 @@ def process_time(val, now):
         return int(dt.timestamp() * 1000), dt.strftime('%H:%M:%S')
     except: return None, None
 
+def clean_price(val):
+    try:
+        if isinstance(val, (float, int)): return float(val)
+        s = str(val).strip().replace(' ', '')
+        if ',' in s and '.' in s: s = s.replace('.', '').replace(',', '.')
+        elif ',' in s: s = s.replace(',', '.')
+        return float(s)
+    except: return 0.0
+
 def read_historical_data(sent_buffer):
     """Lê a aba Histórico para carregar o passado"""
     global last_historical_ts
@@ -141,7 +150,7 @@ def read_historical_data(sent_buffer):
         ts, time_str = process_time(row[0], now)
         if ts:
             try:
-                price = float(str(row[2]).replace('.','').replace(',','.')) if row[2] else 0
+                price = clean_price(row[2])
                 qty = int(row[3]) if row[3] else 0
                 side = "BUY" if "COMPR" in str(row[5]).upper() else "SELL"
                 
@@ -205,8 +214,8 @@ def main():
 
             # Preço atual pegamos da primeira linha de Compra ou Venda
             current_price = 0
-            if data[0][1]: current_price = float(str(data[0][1]).replace('.','').replace(',','.'))
-            elif data[0][7]: current_price = float(str(data[0][7]).replace('.','').replace(',','.'))
+            if data[0][1]: current_price = clean_price(data[0][1])
+            elif data[0][7]: current_price = clean_price(data[0][7])
             
             now = datetime.datetime.now()
             new_trades = []
@@ -218,7 +227,7 @@ def main():
                     ts, time_str = process_time(row[0], now)
                     if ts and ts >= last_historical_ts:
                         try:
-                            p = float(str(row[1]).replace('.','').replace(',','.'))
+                            p = clean_price(row[1])
                             q = int(row[2])
                             sig = f"BUY_{ts}_{p}_{q}"
                             counters[sig] = counters.get(sig, 0) + 1
@@ -233,7 +242,7 @@ def main():
                     ts, time_str = process_time(row[6], now)
                     if ts and ts >= last_historical_ts:
                         try:
-                            p = float(str(row[7]).replace('.','').replace(',','.'))
+                            p = clean_price(row[7])
                             q = int(row[8])
                             sig = f"SELL_{ts}_{p}_{q}"
                             counters[sig] = counters.get(sig, 0) + 1

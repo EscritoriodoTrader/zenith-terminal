@@ -172,6 +172,8 @@ def main():
                 continue
 
             if not historical_loaded:
+                print(f"[{datetime.datetime.now().strftime('%H:%M:%S')}] Motor Ligado! Resetando banco e carregando dados...")
+                clear_database() # Limpa o banco de dados na nuvem para a nova sessão
                 read_historical_data(sent_trades_buffer)
                 historical_loaded = True
 

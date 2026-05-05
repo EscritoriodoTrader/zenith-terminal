@@ -897,6 +897,9 @@ function connectMotor() {
 
 function processTrades(trades) {
     if (!trades || !Array.isArray(trades)) return;
+    console.log("%c >>> 📥 DADOS CHEGANDO NO NAVEGADOR! <<< ", "background: #00ff00; color: #000; font-size: 16px; font-weight: bold;");
+    console.log(`[ZENITH]: Recebidos ${trades.length} trades.`);
+    needsHistoryRedraw = true; // Força o redesenho completo
     
     let tfMin = parseInt(currentTimeframe) || 5;
     if (currentTimeframe.toUpperCase().includes('H')) tfMin *= 60;

@@ -103,3 +103,13 @@ wss.on('connection', async (ws) => {
 
 const PORT = process.env.PORT || 10000;
 server.listen(PORT, () => console.log(`ZENITH ON: ${PORT}`));
+
+function broadcast(data) {
+    const message = JSON.stringify(data);
+    wss.clients.forEach((client) => {
+        if (client.readyState === 2) return; // 2 = CLOSING
+        if (client.readyState === 1) { // 1 = OPEN
+            client.send(message);
+        }
+    });
+}

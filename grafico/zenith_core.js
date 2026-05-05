@@ -847,11 +847,11 @@ function connectMotor() {
                 updateMotorUI();
                 
                 if (!msg.running) {
-                    console.log("🛑 Motor desligado. Limpando tudo...");
+                    console.log(`🛑 MOTOR OFF: Limpando ${chartData.length} candles e ${rawTrades.length} trades brutos.`);
                     // Limpeza Local (RAM)
                     chartData = []; chartDataMap.clear(); processedTradeIds.clear(); rawTrades = [];
                     // Limpeza Visual (Cache de Imagem)
-                    historyCanvasCache.width = historyCanvasCache.width; // Reseta o cache de desenho
+                    historyCanvasCache.width = historyCanvasCache.width; 
                     needsHistoryRedraw = true;
                     needsScaleRedraw = true;
                     autoScale();
@@ -859,7 +859,8 @@ function connectMotor() {
                     
                     // Limpeza Remota (Banco de Dados)
                     fetch('/api/trades/clear', { method: 'DELETE' })
-                        .catch(err => console.error("Erro ao limpar banco:", err));
+                        .then(() => console.log("✅ Banco de dados remoto limpo."))
+                        .catch(err => console.error("❌ Erro ao limpar banco:", err));
                 }
                 
                 if (wasOff && msg.running && socket.readyState === WebSocket.OPEN) {

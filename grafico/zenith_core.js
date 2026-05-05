@@ -278,6 +278,15 @@ function drawScales(range) {
     // Renderizar caches no canvas visível
     scaleCtx.clearRect(0, 0, sW, sH);
     scaleCtx.drawImage(staticScaleCache, 0, 0, sW, sH);
+    
+    // DESENHAR ETIQUETA DE PREÇO ATUAL (CHEVRON)
+    if (externalLastPrice > 0) {
+        const y = sH - ((externalLastPrice - priceMin) / (priceMax - priceMin)) * sH;
+        if (y >= 0 && y <= sH) {
+            drawChevronTag(scaleCtx, y, themeColor, "#000", priceFormatter.format(externalLastPrice), sW);
+        }
+    }
+
     timeCtx.clearRect(0, 0, tW, 35);
     timeCtx.drawImage(staticTimeCache, 0, 0, tW, 35);
 
@@ -827,14 +836,12 @@ function connectMotor() {
     if (statusIcon) statusIcon.style.color = '#ff9800'; 
     
     socket.onopen = () => { 
-        console.log("ZENITH CLOUD: Conectado via WSS Seguro"); 
         updateMotorUI(); 
     };
 
     socket.onmessage = (e) => {
         try {
             const msg = JSON.parse(e.data);
-            console.log("[RAW WS]:", msg.type, msg);
             
             if (msg.type === 'MOTOR_STATUS') {
                 const wasOff = motorStatus === 'off';
@@ -843,20 +850,9 @@ function connectMotor() {
                 updateMotorUI();
                 
                 if (!msg.running) {
-                    console.log(`🛑 MOTOR OFF: Limpando ${chartData.length} candles e ${rawTrades.length} trades brutos.`);
-                    // Limpeza Local (RAM)
-                    chartData = []; chartDataMap.clear(); processedTradeIds.clear(); rawTrades = [];
-                    // Limpeza Visual (Cache de Imagem)
-                    historyCanvasCache.width = historyCanvasCache.width; 
-                    needsHistoryRedraw = true;
-                    needsScaleRedraw = true;
-                    autoScale();
-                    draw();
-                    
                     // Limpeza Remota (Banco de Dados)
                     fetch('/api/trades/clear', { method: 'DELETE' })
-                        .then(() => console.log("✅ Banco de dados remoto limpo."))
-                        .catch(err => console.error("❌ Erro ao limpar banco:", err));
+                        .catch(err => {});
                 }
                 
                 if (wasOff && msg.running && socket.readyState === WebSocket.OPEN) {
@@ -869,15 +865,17 @@ function connectMotor() {
                 if (varElem) {
                     varElem.innerText = (msg.variation || 0).toFixed(2) + '%';
                     varElem.style.color = msg.variation >= 0 ? '#089981' : '#f23645';
-                    varElem.style.opacity = "1";
                 }
+                
+                // Filtro de Segurança: Só aceita preços na casa dos 27 mil (Nasdaq)
+                if (msg.lastPrice > 50000) msg.lastPrice = msg.lastPrice / 10;
+                
                 externalLastPrice = msg.lastPrice;
                 if (chartData.length > 0) {
                     const cur = chartData[0];
                     cur.close = externalLastPrice;
-                    if (externalLastPrice > cur.high) cur.high = externalLastPrice;
-                    if (externalLastPrice < cur.low) cur.low = externalLastPrice;
                 }
+                needsScaleRedraw = true;
             }
 
             if (msg.type === 'HISTORICAL_TRADES' || msg.type === 'NEW_TRADES' || msg.type === 'NEW_TRADE') {
@@ -901,9 +899,6 @@ function connectMotor() {
 
 function processTrades(trades) {
     if (!trades || !Array.isArray(trades)) return;
-    console.log("%c >>> 📥 DADOS CHEGANDO NO NAVEGADOR! <<< ", "background: #00ff00; color: #000; font-size: 16px; font-weight: bold;");
-    console.log(`[ZENITH]: Recebidos ${trades.length} trades.`);
-    needsHistoryRedraw = true; // Força o redesenho completo
     
     let tfMin = parseInt(currentTimeframe) || 5;
     if (currentTimeframe.toUpperCase().includes('H')) tfMin *= 60;
@@ -912,6 +907,10 @@ function processTrades(trades) {
     let addedNewCandle = false;
 
     trades.forEach(t => {
+        // FILTRO DE SEGURANÇA: Ignora trades com preços absurdos (fora do range de 27k)
+        if (t.price > 100000) t.price = t.price / 10;
+        if (t.price < 5000) return; // Se for menor que 5k, ignora
+        
         if (!t.id || processedTradeIds.has(t.id)) return;
         processedTradeIds.add(t.id);
         rawTrades.push(t); 
@@ -957,14 +956,12 @@ function processTrades(trades) {
         // FORÇA O PULO PARA O PREÇO REAL (Não deixa as velas escondidas)
         if (chartData.length > 0) {
             autoScale(); 
-            console.log("📈 [AUTO-SCALE]: Gráfico ajustado para o preço real.");
         }
     }
 }
 
 // Função de RE-AGREGAÇÃO ULTRA-RÁPIDA (Local)
 function reaggregateChart() {
-    console.log("🚀 Re-agregando gráfico para", currentTimeframe);
     chartData = [];
     chartDataMap.clear();
     const currentProcessedIds = new Set(processedTradeIds); // Backup
@@ -991,11 +988,9 @@ function updateMotorUI() {
     if (motorStatus === 'on') {
         btn.classList.add('on');
         btn.classList.remove('off');
-        console.log("🎨 UI: Botão Motor -> VERDE");
     } else {
         btn.classList.add('off');
         btn.classList.remove('on');
-        console.log("🎨 UI: Botão Motor -> VERMELHO");
     }
 
     // Ícone de Baixo: Status do Terminal (Conexão com Servidor)
@@ -1015,7 +1010,6 @@ function updateMotorUI() {
 document.addEventListener('click', (e) => {
     const btn = e.target.closest('#motor-toggle');
     if (btn) {
-        console.log("⚡ CLIQUE GLOBAL DETECTADO NO MOTOR!");
         const newStatus = (motorStatus === 'on') ? 'off' : 'on';
         
         motorStatus = newStatus;

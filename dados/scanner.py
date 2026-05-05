@@ -234,8 +234,10 @@ def main():
                 tx_queue.put({"trades": new_trades, "last_price": current_price, "variation": 0})
                 last_price_sent = current_price
             else:
-                # Log de batimento cardíaco (opcional, para saber que está vivo)
-                pass
+                if time.time() - last_wait_log > 2:
+                    status_motor = "LIGADO" if is_active else "STANDBY"
+                    print(f"[{datetime.datetime.now().strftime('%H:%M:%S')}] [VIVO] Motor: {status_motor} | Lendo aba Dados_RTD...")
+                    last_wait_log = time.time()
 
             time.sleep(SCAN_INTERVAL)
         except Exception as e:

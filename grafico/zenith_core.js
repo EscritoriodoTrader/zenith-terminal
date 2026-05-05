@@ -861,20 +861,18 @@ function connectMotor() {
             }
 
             if (msg.type === 'MARKET_DATA') {
+                // Atualiza o preço vindo da C2
+                if (msg.lastPrice > 0) {
+                    externalLastPrice = msg.lastPrice;
+                    hasRealData = true; // Ativa a exibição do preço
+                }
+                
                 const varElem = document.getElementById('variation');
                 if (varElem) {
                     varElem.innerText = (msg.variation || 0).toFixed(2) + '%';
                     varElem.style.color = msg.variation >= 0 ? '#089981' : '#f23645';
                 }
                 
-                // Filtro de Segurança: Só aceita preços na casa dos 27 mil (Nasdaq)
-                if (msg.lastPrice > 50000) msg.lastPrice = msg.lastPrice / 10;
-                
-                externalLastPrice = msg.lastPrice;
-                if (chartData.length > 0) {
-                    const cur = chartData[0];
-                    cur.close = externalLastPrice;
-                }
                 needsScaleRedraw = true;
             }
 

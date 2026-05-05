@@ -359,29 +359,18 @@ function draw() {
         if (chartData.length === 0) {
             drawScales(range);
 
-            // Mensagem de Status
-            ctx.fillStyle = "rgba(255,255,255,0.5)";
-            ctx.font = "20px Arial";
-            ctx.textAlign = "center";
-
-            let statusText = "Aguardando Dados...";
+            const centerX = (canvas.width / dpr) / 2; // Centro absoluto (ignora margem da régua)
+            const centerY = (canvas.height / dpr) / 2;
+            let statusText = "Aguardando negócios do Excel...";
             let statusColor = "rgba(255,255,255,0.5)";
 
             if (!socket || socket.readyState !== WebSocket.OPEN) {
                 statusText = "❌ DESCONECTADO DO SERVIDOR";
                 statusColor = "#f23645";
             } else if (motorStatus === 'off') {
-                statusText = "LIGAR POWER";
-                statusColor = "#ffffff"; // Branco
-            }
-
-            const centerX = (canvas.width / dpr - rightMargin) / 2;
-            const centerY = (canvas.height / dpr) / 2;
-
-            if (motorStatus === 'off' && socket && socket.readyState === WebSocket.OPEN) {
                 statusText = "Ligar Power";
-                const iconColor = "#089981"; // Verde Zenith
-                const textColor = "#ffffff"; // Branco
+                const iconColor = "#089981"; 
+                const textColor = "#ffffff"; 
                 
                 ctx.font = "bold 26px Arial";
                 const textWidth = ctx.measureText(statusText).width;
@@ -390,28 +379,30 @@ function draw() {
                 const totalWidth = iconSize + gap + textWidth;
                 const startX = centerX - (totalWidth / 2);
                 
-                // 1. DESENHA ÍCONE (VERDE)
+                // Desenha Ícone de Power Centralizado Verticalmente
                 ctx.save();
                 ctx.strokeStyle = iconColor;
                 ctx.lineWidth = 3.5;
                 ctx.lineCap = "round";
                 const iconX = startX + iconSize/2;
+                const iconY = centerY; // Centralizado no Y real
                 
                 ctx.beginPath();
-                ctx.arc(iconX, centerY - 2, iconSize/2, -Math.PI/3.5, Math.PI + Math.PI/3.5);
+                ctx.arc(iconX, iconY, iconSize/2, -Math.PI/3.5, Math.PI + Math.PI/3.5);
                 ctx.stroke();
                 
                 ctx.beginPath();
-                ctx.moveTo(iconX, centerY - 2 - iconSize/2);
-                ctx.lineTo(iconX, centerY - 2);
+                ctx.moveTo(iconX, iconY - iconSize/2);
+                ctx.lineTo(iconX, iconY);
                 ctx.stroke();
                 ctx.restore();
 
-                // 2. DESENHA TEXTO (BRANCO)
                 ctx.fillStyle = textColor;
                 ctx.textAlign = "left";
-                ctx.fillText(statusText, startX + iconSize + gap, centerY + 8);
+                ctx.textBaseline = "middle"; // Alinhamento vertical preciso
+                ctx.fillText(statusText, startX + iconSize + gap, iconY + 2);
             } else {
+                statusText = "Aguardando Dados...";
                 ctx.fillStyle = statusColor;
                 ctx.font = "bold 24px Arial";
                 ctx.textAlign = "center";
@@ -898,13 +889,16 @@ window.addEventListener('keydown', (e) => {
 });
 // LÓGICA DO MOTOR
 function connectMotor() {
-
+    // Se já estiver conectando ou aberto, não faz nada
+    if (socket && (socket.readyState === WebSocket.CONNECTING || socket.readyState === WebSocket.OPEN)) return;
+    
     if (socket) socket.close();
 
     // Força WSS na nuvem (Render) e WS no local
+    // Força IPv4 no local para evitar erro de handshake no Windows
     const isLocal = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
     const protocol = isLocal ? 'ws:' : 'wss:';
-    const host = window.location.host;
+    const host = isLocal ? `127.0.0.1:${window.location.port || 10000}` : window.location.host;
 
     socket = new WebSocket(`${protocol}//${host}`);
 
@@ -912,7 +906,23 @@ function connectMotor() {
     if (statusIcon) statusIcon.style.color = '#ff9800';
 
     socket.onopen = () => {
-        updateMotorUI();
+        console.log("[WS]: Rádio conectado. Sincronizando estado...");
+        if (statusIcon) statusIcon.style.color = '#089981'; // Verde Zenith
+        
+        const isRunning = (motorStatus === 'on');
+        socket.send(JSON.stringify({ type: 'TOGGLE_MOTOR', running: isRunning }));
+        
+        // Sempre pede o histórico ao conectar (resolve o problema do F5)
+        socket.send(JSON.stringify({ type: 'GET_HISTORY' }));
+    };
+
+    socket.onclose = () => {
+        if (statusIcon) statusIcon.style.color = '#f23645'; // Vermelho
+        setTimeout(connectMotor, 3000); // Tenta reconectar em 3s
+    };
+
+    socket.onerror = () => {
+        if (statusIcon) statusIcon.style.color = '#f23645'; // Vermelho
     };
 
     socket.onmessage = (e) => {
@@ -944,7 +954,10 @@ function connectMotor() {
                 }
             }
 
-            if (msg.type === 'MARKET_DATA' || msg.type === 'NEW_TRADES') {
+            if (msg.type === 'MARKET_DATA' || msg.type === 'NEW_TRADES' || msg.type === 'NEW_DATA') {
+                // Limpeza agressiva de avisos
+                const ov = document.getElementById('waiting-data') || document.querySelector('.waiting-data-overlay');
+                if (ov) ov.style.display = 'none';
                 // Atualiza o Ativo e Variação vindo do Excel (A2 e H2)
                 if (msg.asset) {
                     const assetElem = document.querySelector('.asset-name');
@@ -955,20 +968,18 @@ function connectMotor() {
                 }
 
                 if (msg.lastPrice > 0) {
-                    const isFirstData = !hasRealData;
                     externalLastPrice = msg.lastPrice;
-                    hasRealData = true;
+                    if (!hasRealData) {
+                        hasRealData = true;
+                        
+                        // Ajusta a escala para o preço real (Nasdaq 28k)
+                        const range = 50;
+                        priceMax = externalLastPrice + (range / 2);
+                        priceMin = externalLastPrice - (range / 2);
 
-                    // Se for o primeiro dado (F5 ou Motor On), força o ajuste da escala IMEDIATAMENTE
-                    if (isFirstData) {
-                        if (chartData.length === 0) {
-                            // Se não tem velas ainda, centraliza o preço no meio da tela
-                            const initialRange = 40; // Range inicial de 40 pontos
-                            priceMax = externalLastPrice + (initialRange / 2);
-                            priceMin = externalLastPrice - (initialRange / 2);
-                        } else {
-                            autoScale();
-                        }
+                        // Esconde o overlay de "Aguardando Dados" (tenta ID e Classe)
+                        const overlay = document.getElementById('waiting-data') || document.querySelector('.waiting-data-overlay') || document.querySelector('.waiting-data');
+                        if (overlay) overlay.style.display = 'none';
                     }
                 }
 
@@ -986,7 +997,7 @@ function connectMotor() {
                 needsScaleRedraw = true;
             }
 
-            if (msg.type === 'HISTORICAL_TRADES' || msg.type === 'NEW_TRADES' || msg.type === 'NEW_TRADE') {
+            if (msg.type === 'HISTORICAL_TRADES' || msg.type === 'NEW_TRADES' || msg.type === 'NEW_TRADE' || msg.type === 'NEW_DATA') {
                 const list = msg.trades || msg.data || (msg.id ? [msg] : null);
                 if (list && list.length > 0) processTrades(list);
             }
@@ -1015,10 +1026,8 @@ function processTrades(trades) {
     let addedNewCandle = false;
 
     trades.forEach(t => {
-        // FILTRO DE SEGURANÇA: Ignora trades com preços absurdos (fora do range de 27k)
-        if (t.price > 100000) t.price = t.price / 10;
-        if (t.price < 5000) return; // Se for menor que 5k, ignora
-
+        if (t.price > 1000000) t.price = t.price / 10;
+        
         if (!t.id || processedTradeIds.has(t.id)) return;
         processedTradeIds.add(t.id);
         rawTrades.push(t);
@@ -1029,7 +1038,7 @@ function processTrades(trades) {
             processedTradeIds.delete(removed.id);
         }
 
-        const candleTime = Math.floor(t.timestamp / tfMs) * tfMs;
+        const candleTime = Math.floor(Number(t.timestamp) / tfMs) * tfMs;
         let candle = chartDataMap.get(candleTime);
 
         if (!candle) {
@@ -1057,7 +1066,7 @@ function processTrades(trades) {
     });
 
     if (addedNewCandle) {
-        chartData.sort((a, b) => b.timestamp - a.timestamp);
+        chartData.sort((a, b) => b.timestamp.getTime() - a.timestamp.getTime());
         needsHistoryRedraw = true;
         needsScaleRedraw = true;
 
@@ -1108,15 +1117,7 @@ function updateMotorUI() {
         hasRealData = false;
     }
 
-    // Ícone de Baixo: Status do Terminal (Conexão com Servidor)
-    // Se motorStatus estiver 'on' em localStorage, tentamos manter verde ou laranja
-    if (socket && socket.readyState === WebSocket.OPEN) {
-        if (statusIcon) statusIcon.style.color = '#089981'; // Verde: Terminal Conectado
-    } else if (motorStatus === 'on' || (socket && socket.readyState === WebSocket.CONNECTING)) {
-        if (statusIcon) statusIcon.style.color = '#ff9800'; // Laranja: Reconectando...
-    } else {
-        if (statusIcon) statusIcon.style.color = 'rgba(255,255,255,0.2)'; // Cinza: Terminal Off
-    }
+    // O ícone de status (rádio) agora é gerenciado 100% pelos eventos do WebSocket (onopen, onclose, etc)
 }
 
 
@@ -1132,7 +1133,10 @@ document.addEventListener('click', (e) => {
         setStorage('zenith_motor', motorStatus);
 
         if (socket && socket.readyState === WebSocket.OPEN) {
-            socket.send(JSON.stringify({ type: 'TOGGLE_MOTOR' }));
+            socket.send(JSON.stringify({ 
+                type: 'TOGGLE_MOTOR', 
+                running: (motorStatus === 'on') 
+            }));
         } else if (newStatus === 'on') {
             connectMotor();
         }
@@ -1226,7 +1230,7 @@ function drawChevronTag(ctx, y, color, textColor, text, width) {
 // INICIALIZAÇÃO FINAL
 loadSettingsFromServer().then(() => {
     updateMotorUI();
-    if (motorStatus === 'on') connectMotor();
+    connectMotor();
     resize();
     draw();
 });

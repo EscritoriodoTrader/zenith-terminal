@@ -15,7 +15,7 @@ SHEET_RTD = "Dados_RTD"
 SHEET_HISTORICO = "Historico"
 
 # Tenta usar Localhost se o server estiver rodando na mesma máquina
-LOCAL_SERVER = "localhost:10000"
+LOCAL_SERVER = "127.0.0.1:10000"
 REMOTE_SERVER = "zenith-terminal-bvj4.onrender.com"
 SERVER_HOST = LOCAL_SERVER 
 
@@ -41,31 +41,45 @@ last_historical_ts = 0
 
 ws_client = None
 
+history_requested = False
+
 def on_message(ws, message):
-    global is_active, ws_client
+    global is_active, ws_client, history_requested
     ws_client = ws
     try:
         msg = json.loads(message)
-        if msg.get('type') == 'MOTOR_STATUS':
+        t = msg.get('type')
+        if t in ['MOTOR_STATUS', 'TOGGLE_MOTOR']:
             is_active = msg.get('running', False)
+            print(f"[COMANDO]: Motor {'LIGADO' if is_active else 'DESLIGADO'}")
+        elif t == 'GET_HISTORY':
+            history_requested = True
+            print("[SISTEMA]: Solicitação de HISTÓRICO recebida.")
     except: pass
 
 def start_ws():
     def run():
         global ws_client
         print(f"[WS]: Iniciando conexão com o servidor em {SERVER_HOST}...")
+        def on_open(ws):
+            global ws_client
+            ws_client = ws
+            print(f"[WS]: Túnel de dados CONECTADO em {ws_url}")
+            # Manda um "Oi" para o gráfico só para testar o canal
+            try:
+                ws.send(json.dumps({"type": "PING", "origin": "PYTHON_MOTOR"}))
+            except: pass
+
         while True:
             try:
-                # Detecta se deve usar WS (local) ou WSS (nuvem)
                 protocol = "ws" if "localhost" in SERVER_HOST or "127.0.0.1" in SERVER_HOST else "wss"
                 ws_url = f"{protocol}://{SERVER_HOST}"
                 
-                ws = websocket.WebSocketApp(ws_url, on_message=on_message)
-                print(f"[WS]: Túnel de dados aberto em {ws_url}")
+                ws = websocket.WebSocketApp(ws_url, on_message=on_message, on_open=on_open)
                 ws.run_forever()
             except Exception as e:
                 print(f"[WS]: Erro na conexão: {e}")
-            time.sleep(5)
+            time.sleep(2)
     threading.Thread(target=run, daemon=True).start()
 
 start_ws()
@@ -83,10 +97,10 @@ def tx_worker():
             if ws_client and ws_client.sock and ws_client.sock.connected:
                 try:
                     ws_client.send(json.dumps({
-                        "type": "NEW_TRADES",
+                        "type": "NEW_DATA",
                         "asset": payload.get("asset", "---"),
-                        "data": payload.get("trades", []),
-                        "last_price": payload.get("last_price", 0),
+                        "data": payload.get("data", []),
+                        "lastPrice": payload.get("lastPrice", 0),
                         "variation": payload.get("variation", 0)
                     }))
                     sent_ws = True
@@ -134,27 +148,37 @@ def get_sheet(name):
 
 def process_time(val, now):
     try:
+        if not val: return None, None
         ms = 0
+        h, m, s = 0, 0, 0
+
         if isinstance(val, datetime.datetime):
             h, m, s, ms = val.hour, val.minute, val.second, val.microsecond // 1000
         elif isinstance(val, (float, int)):
+            # Formato Serial do Excel
             seconds = int(val * 86400)
             h, m, s = (seconds // 3600) % 24, (seconds // 60) % 60, seconds % 60
         else:
-            v_str = str(val).replace(',', '.')
+            v_str = str(val).strip().replace(',', '.')
             time_part = v_str.split(' ')[-1] if ' ' in v_str else v_str
-            # Trata Milissegundos
+            
             if '.' in time_part:
                 time_part, ms_str = time_part.split('.')
                 ms = int(ms_str[:3].ljust(3, '0'))
             
             p = time_part.split(':')
-            h, m, s = int(p[0]), int(p[1]), int(p[2])
+            h = int(p[0])
+            m = int(p[1]) if len(p) > 1 else 0
+            s = int(p[2]) if len(p) > 2 else 0
 
         dt = now.replace(hour=h, minute=m, second=s, microsecond=ms * 1000)
-        if dt > now + datetime.timedelta(hours=4): dt -= datetime.timedelta(days=1)
+        # Ajuste de Fuso Horário/Virada de Dia
+        if dt > now + datetime.timedelta(hours=2): 
+            dt -= datetime.timedelta(days=1)
+            
         return int(dt.timestamp() * 1000), dt.strftime('%H:%M:%S')
-    except: return None, None
+    except Exception as e:
+        return None, None
 
 def clean_price(val):
     try:
@@ -221,7 +245,7 @@ def read_historical_data(sent_buffer):
     if hist_trades:
         hist_trades.sort(key=lambda x: x['timestamp'])
         print(f"[HISTORICO]: Enviando {len(hist_trades)} trades históricos.")
-        tx_queue.put({"trades": hist_trades, "last_price": hist_trades[-1]['price'], "variation": 0})
+        tx_queue.put({"data": hist_trades, "lastPrice": hist_trades[-1]['price'], "variation": 0})
 
 def main():
     global last_historical_ts
@@ -257,11 +281,17 @@ def main():
                 historical_loaded = True
 
             if not sheet_rtd:
-                sheet_rtd = get_sheet("Dados_RTD")
+                # Tenta vários nomes comuns de abas
+                for name in ["Dados_RTD", "RTD", "Fluxo", "Planilha1"]:
+                    sheet_rtd = get_sheet(name)
+                    if sheet_rtd: 
+                        print(f"[RTD]: Conectado com sucesso à aba '{name}'.")
+                        break
+                
                 if not sheet_rtd:
-                    time.sleep(2)
+                    print("[AVISO]: Não encontrei a aba de dados no Excel. Verifique se o nome é 'Dados_RTD' ou 'RTD'.")
+                    time.sleep(5)
                     continue
-                print("[RTD]: Conectado à aba Dados_RTD.")
 
             # Leitura do Tempo Real (Duas Tabelas: Compra A-D | Venda G-J)
             data = sheet_rtd.range("A8:J500").value
@@ -274,59 +304,68 @@ def main():
                 asset_name = str(sheet_rtd.range("A2").value or "---")
                 current_price = clean_price(sheet_rtd.range("C2").value)
                 variation = clean_variation(sheet_rtd.range("H2").value)
+                
+                variation = clean_variation(sheet_rtd.range("H2").value)
             except:
                 asset_name = "---"
                 current_price = 0
                 variation = 0
             
-            now = datetime.datetime.now()
             new_trades = []
+            now = datetime.datetime.now()
             counters = {}
 
+            global history_requested
             for row in data:
+                if not row: continue
+
                 # 1. PROCESSA BLOCO COMPRA (A, B, C, D)
-                if row[0] and row[1] and row[2]:
+                if len(row) > 2 and row[0] and row[1] and row[2]:
                     ts, time_str = process_time(row[0], now)
                     if ts and ts >= last_historical_ts:
                         try:
                             p = clean_price(row[1])
-                            q = int(row[2])
-                            sig = f"BUY_{ts}_{p}_{q}"
-                            counters[sig] = counters.get(sig, 0) + 1
-                            uid = f"{sig}_{counters[sig]}"
-                            if uid not in sent_trades_buffer:
+                            q = int(float(str(row[2]).replace(',', '.')))
+                            uid = f"BUY_{ts}_{p}_{q}"
+                            if uid not in sent_trades_buffer or history_requested:
                                 new_trades.append({"id": uid, "timestamp": ts, "price": p, "quantity": q, "side": "BUY"})
                                 sent_trades_buffer.add(uid)
-                        except: pass
+                        except Exception as e:
+                            pass
 
                 # 2. PROCESSA BLOCO VENDA (G, H, I, J)
-                if row[6] and row[7] and row[8]:
+                if len(row) > 8 and row[6] and row[7] and row[8]:
                     ts, time_str = process_time(row[6], now)
                     if ts and ts >= last_historical_ts:
                         try:
                             p = clean_price(row[7])
-                            q = int(row[8])
-                            sig = f"SELL_{ts}_{p}_{q}"
-                            counters[sig] = counters.get(sig, 0) + 1
-                            uid = f"{sig}_{counters[sig]}"
-                            if uid not in sent_trades_buffer:
+                            q = int(float(str(row[8]).replace(',', '.')))
+                            uid = f"SELL_{ts}_{p}_{q}"
+                            if uid not in sent_trades_buffer or history_requested:
                                 new_trades.append({"id": uid, "timestamp": ts, "price": p, "quantity": q, "side": "SELL"})
                                 sent_trades_buffer.add(uid)
-                        except: pass
+                        except Exception as e:
+                            pass
+
+            if history_requested:
+                print(f"[SISTEMA]: Histórico enviado ({len(new_trades)} trades).")
+                history_requested = False
 
             if len(sent_trades_buffer) > 40000:
                 sent_trades_buffer = set(list(sent_trades_buffer)[-20000:])
 
-            # Envia sempre a variação e o nome do ativo, mesmo sem novos trades (para manter UI atualizada)
+            # Transmissão de Dados
             if new_trades or current_price != last_price_sent or variation != last_variation_sent:
-                print(f"[{datetime.datetime.now().strftime('%H:%M:%S')}] >>> ENVIANDO DADOS | {asset_name} | Preço: {current_price} | Var: {variation:.2f}% <<<")
+                if new_trades:
+                    print(f"[{datetime.datetime.now().strftime('%H:%M:%S')}] >>> ENVIANDO {len(new_trades)} NEGÓCIOS | {asset_name} | {current_price} <<<")
+                
                 if new_trades: new_trades.sort(key=lambda x: x['timestamp'])
                 
                 tx_queue.put({
                     "type": "NEW_DATA",
                     "asset": asset_name,
-                    "trades": new_trades, 
-                    "last_price": current_price, 
+                    "data": new_trades, 
+                    "lastPrice": current_price, 
                     "variation": variation
                 })
                 last_price_sent = current_price

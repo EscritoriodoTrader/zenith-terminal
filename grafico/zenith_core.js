@@ -841,6 +841,7 @@ function connectMotor() {
     socket.onmessage = (e) => {
         try {
             const msg = JSON.parse(e.data);
+            console.log("[RAW WS]:", msg.type, msg);
             
             if (msg.type === 'MOTOR_STATUS') {
                 const wasOff = motorStatus === 'off';

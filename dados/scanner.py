@@ -229,7 +229,7 @@ def main():
                 sent_trades_buffer = set(list(sent_trades_buffer)[-20000:])
 
             if new_trades:
-                print(f"[{datetime.datetime.now().strftime('%H:%M:%S')}] >>> ENVIANDO {len(new_trades)} TRADES AO SERVIDOR <<<")
+                print(f"[{datetime.datetime.now().strftime('%H:%M:%S')}] >>> ENVIANDO {len(new_trades)} TRADES | EX: {new_trades[0]['timestamp']} <<<")
                 new_trades.sort(key=lambda x: x['timestamp'])
                 tx_queue.put({"trades": new_trades, "last_price": current_price, "variation": 0})
                 last_price_sent = current_price

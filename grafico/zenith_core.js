@@ -1072,3 +1072,34 @@ if (toolClear) {
     };
 }
 
+// 11. UTILITÁRIOS DE CÁLCULO E DESENHO
+function calculatePriceStep(range) {
+    if (!range || range <= 0) return 0.25;
+    const targetTicks = 10;
+    let step = range / targetTicks;
+    const magnitude = Math.pow(10, Math.floor(Math.log10(step)));
+    const res = step / magnitude;
+    if (res > 5) step = 10 * magnitude;
+    else if (res > 2) step = 5 * magnitude;
+    else if (res > 1) step = 2 * magnitude;
+    else step = magnitude;
+    return Math.max(0.25, step); // Mínimo de 0.25 para Nasdaq
+}
+
+function drawChevronTag(ctx, y, color, textColor, text, width) {
+    ctx.save();
+    ctx.fillStyle = color;
+    ctx.beginPath();
+    ctx.moveTo(width, y);
+    ctx.lineTo(width - 8, y - 9);
+    ctx.lineTo(0, y - 9);
+    ctx.lineTo(0, y + 9);
+    ctx.lineTo(width - 8, y + 9);
+    ctx.closePath();
+    ctx.fill();
+    ctx.fillStyle = textColor;
+    ctx.font = "bold 11px Arial";
+    ctx.textAlign = "center";
+    ctx.fillText(text, width / 2, y + 4);
+    ctx.restore();
+}

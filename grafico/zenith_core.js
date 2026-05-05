@@ -1,6 +1,6 @@
 /**
- * ZENITH TERMINAL - V7.1
- * ESTABILIDADE TOTAL DE PERSISTÊNCIA E RENDERIZAÇÃO
+ * ZENITH TERMINAL - V7.2
+ * CORREÇÃO MATEMÁTICA DE ORDENAÇÃO DE HISTÓRICO (F5 FIX)
  */
 
 // 1. CONFIGURAÇÃO E ELEMENTOS
@@ -1097,8 +1097,8 @@ function connectMotor() {
                 if (list && list.length > 0) {
                     hasRealData = true; // Avisa o sistema que já temos preço real para escalar
                     processTrades(list);
-                    // Ordena o histórico por tempo para garantir o fluxo
-                    chartData.sort((a, b) => a.timestamp - b.timestamp);
+                    // CORREÇÃO CRÍTICA: Ordena do mais NOVO para o mais ANTIGO (Decrescente)
+                    chartData.sort((a, b) => b.timestamp - a.timestamp);
                     
                     // Força o auto-ajuste para encontrar os candles históricos no preço
                     needsAutoScale = true;

@@ -249,9 +249,8 @@ def read_historical_data(sent_buffer):
 
 def main():
     global last_historical_ts
-    print("--- ZENITH SCANNER V5.3: DYNAMIC HISTORICO ---")
+    print("--- ZENITH SCANNER V5.6: MOTOR RESTAURADO ---")
     threading.Thread(target=tx_worker, daemon=True).start()
-    clear_database()
     
     sheet_rtd = None
     sent_trades_buffer = set()
@@ -275,8 +274,8 @@ def main():
                 continue
 
             if not historical_loaded:
-                print(f"[{datetime.datetime.now().strftime('%H:%M:%S')}] Motor Ligado! Resetando e carregando histórico...")
-                clear_database()
+                print(f"[{datetime.datetime.now().strftime('%H:%M:%S')}] Motor Ligado! Carregando histórico inicial...")
+                # clear_database() <- REMOVIDO: Para não apagar o banco no F5
                 read_historical_data(sent_trades_buffer)
                 historical_loaded = True
 
@@ -294,7 +293,7 @@ def main():
                     continue
 
             # Leitura do Tempo Real (Duas Tabelas: Compra A-D | Venda G-J)
-            data = sheet_rtd.range("A8:J500").value
+            data = sheet_rtd.range("A8:J507").value
             if not data or not data[0]:
                 time.sleep(0.1)
                 continue

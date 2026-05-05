@@ -4,16 +4,20 @@ const { spawn, execSync } = require('child_process');
 const path = require('path');
 const WebSocket = require('ws');
 const fs = require('fs');
+const db = require('./database');
 
 const app = express();
 const server = require('http').createServer(app);
 const wss = new WebSocket.Server({ server });
 
 app.use(cors());
-app.use(express.json());
+app.use(express.json({ limit: '10mb' }));
 app.use(express.static(path.join(__dirname, '../grafico')));
 
-// --- PERSISTÊNCIA ---
+// --- BANCO DE DADOS ---
+db.initDatabase().catch(console.error);
+
+// --- PERSISTÊNCIA CONFIGS ---
 const SETTINGS_FILE = path.join(__dirname, 'settings.json');
 function getSettings() {
     try { if (fs.existsSync(SETTINGS_FILE)) return JSON.parse(fs.readFileSync(SETTINGS_FILE, 'utf8')); } catch (e) {}
@@ -24,16 +28,13 @@ function saveSettings(s) { try { fs.writeFileSync(SETTINGS_FILE, JSON.stringify(
 // --- MOTOR PYTHON ---
 function startPythonScanner() {
     if (process.platform !== "win32") return;
-    console.log("[SISTEMA]: Executando limpeza profunda de processos...");
+    console.log("[SISTEMA]: Realizando faxina de processos fantasmas...");
     try { 
-        // Mata todos os Pythons e instâncias órfãs de Node (exceto esta)
         execSync('taskkill /F /IM python.exe /T', { stdio: 'ignore' }); 
         execSync('taskkill /F /IM py.exe /T', { stdio: 'ignore' });
-        // Tenta liberar a porta 10000 se houver algo travado (comando potente do Windows)
-        execSync('for /f "tokens=5" %a in (\'netstat -aon ^| findstr :10000\') do taskkill /f /pid %a', { stdio: 'ignore', shell: true });
     } catch (e) {}
     
-    console.log("[SISTEMA]: Iniciando motor de dados limpo...");
+    console.log("[SISTEMA]: Iniciando novo motor de dados limpo...");
     spawn('python', [path.join(__dirname, 'scanner.py')], { stdio: 'inherit', shell: true });
 }
 
@@ -45,11 +46,19 @@ function broadcast(data) {
     });
 }
 
-wss.on('connection', (ws, req) => {
+wss.on('connection', async (ws, req) => {
     const userAgent = req.headers['user-agent'] || 'Python-Scanner';
     const type = userAgent.includes('Mozilla') ? 'NAVEGADOR' : 'MOTOR PYTHON';
     console.log(`[WS]: ${type} conectado com sucesso.`);
     
+    // Se for um navegador, envia o histórico inicial do banco
+    if (type === 'NAVEGADOR') {
+        const history = await db.getTrades();
+        if (history.length > 0) {
+            ws.send(JSON.stringify({ type: 'HISTORY_DATA', data: history }));
+        }
+    }
+
     ws.on('message', (message) => {
         try {
             const cmd = JSON.parse(message);
@@ -67,11 +76,24 @@ wss.on('connection', (ws, req) => {
 // Rotas API
 app.get('/api/settings', (req, res) => res.json(getSettings()));
 app.post('/api/settings', (req, res) => { saveSettings(req.body); res.sendStatus(200); });
-app.post('/api/trades', (req, res) => { broadcast(req.body); res.sendStatus(200); });
-app.all('/api/trades/clear', (req, res) => res.sendStatus(200));
+
+// Rota de Trades: Salva no banco e faz broadcast
+app.post('/api/trades', async (req, res) => {
+    const payload = req.body;
+    if (payload.type === 'NEW_DATA' && payload.data) {
+        await db.insertTrades(payload.data);
+    }
+    broadcast(payload);
+    res.sendStatus(200);
+});
+
+app.all('/api/trades/clear', async (req, res) => {
+    await db.clearDatabase();
+    res.sendStatus(200);
+});
 
 const PORT = process.env.PORT || 10000;
-startPythonScanner(); // Limpa a porta e o PC antes de ligar
+startPythonScanner();
 
 server.listen(PORT, '0.0.0.0', () => {
     console.log(`🚀 ZENITH ONLINE: Porta ${PORT}`);

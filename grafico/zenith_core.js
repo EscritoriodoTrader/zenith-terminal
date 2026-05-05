@@ -206,14 +206,17 @@ function autoScale() {
         if (c.low < minH) minH = c.low;
     }
 
-    if (minH !== Infinity) {
-        // Aumentado para 30% de margem para forçar o gráfico a abrir mais a escala
-        const r = maxH - minH, p = Math.max(1.0, r * 0.3);
-        const targetMax = maxH + p, targetMin = minH - p;
-
-        priceMax = targetMax; priceMin = targetMin;
-        needsHistoryRedraw = true;
-        needsScaleRedraw = true;
+    if (chartData.length > 0) {
+        // CENTRALIZAÇÃO TOTAL NO PREÇO ATUAL (Garante que nunca suma)
+        const currentP = externalLastPrice || chartData[0].close;
+        if (currentP > 0) {
+            const currentRange = priceMax - priceMin;
+            priceMax = currentP + (currentRange / 2);
+            priceMin = currentP - (currentRange / 2);
+            
+            needsHistoryRedraw = true;
+            needsScaleRedraw = true;
+        }
     }
 }
 
@@ -334,7 +337,6 @@ let hoverStartTime = 0;
 // 7. RENDERIZAÇÃO DO GRÁFICO
 function draw() {
     try {
-        const range = Math.max(0.0001, priceMax - priceMin);
         const dpr = window.devicePixelRatio || 1;
 
         // Processar Escala se solicitado
@@ -343,8 +345,33 @@ function draw() {
             needsAutoScale = false;
         }
 
-        const cW = (canvas.width - rightMargin) / visibleCandles;
-        const tickH = (0.25 / range) * canvas.height;
+        // RECALCULAR RANGE APÓS AJUSTE DE ESCALA (Crucial para não sumir com as velas)
+        const range = Math.max(0.0001, priceMax - priceMin);
+        const cW = (canvas.width / dpr - rightMargin) / visibleCandles;
+        const tickH = (0.25 / range) * (canvas.height / dpr);
+
+        // AUTO-AJUSTE INTELIGENTE (Flexível: Para se estiver estudando com Mão ou Cruz)
+        const isStudying = (activeTool === 'hand' || activeTool === 'cross' || horizontalScroll > 30);
+        if (!isStudying && chartData.length > 0) {
+            const currentP = externalLastPrice || chartData[0].close;
+            if (currentP > 0 && (currentP > priceMax || currentP < priceMin)) {
+                isAutoScale = true; // Força a volta do auto-ajuste se o preço fugir
+                needsAutoScale = true;
+                needsHistoryRedraw = true; // Garante que as velas antigas não sumam
+            }
+        }
+        
+        // Se o rádio não estiver verde (desconectado), o motor Status UI deve refletir
+
+        // Lógica do botão Snap-Back (Voltar ao presente)
+        const snapBtn = document.getElementById('snap-back');
+        if (snapBtn) {
+            if (horizontalScroll > 20) {
+                snapBtn.classList.add('visible');
+            } else {
+                snapBtn.classList.remove('visible');
+            }
+        }
 
         // 1. REDESENHAR CACHE DE HISTÓRICO SE NECESSÁRIO
         if (needsHistoryRedraw) {
@@ -997,7 +1024,7 @@ function connectMotor() {
                 needsScaleRedraw = true;
             }
 
-            if (msg.type === 'HISTORICAL_TRADES' || msg.type === 'NEW_TRADES' || msg.type === 'NEW_TRADE' || msg.type === 'NEW_DATA') {
+            if (msg.type === 'HISTORICAL_TRADES' || msg.type === 'HISTORY_DATA' || msg.type === 'NEW_TRADES' || msg.type === 'NEW_TRADE' || msg.type === 'NEW_DATA') {
                 const list = msg.trades || msg.data || (msg.id ? [msg] : null);
                 if (list && list.length > 0) processTrades(list);
             }
@@ -1032,8 +1059,8 @@ function processTrades(trades) {
         processedTradeIds.add(t.id);
         rawTrades.push(t);
 
-        // Limita o cache para evitar consumo excessivo de RAM (Mantém os últimos 15 mil)
-        if (rawTrades.length > 15000) {
+        // Limita o cache para evitar consumo excessivo de RAM (Mantém os últimos 50 mil)
+        if (rawTrades.length > 50000) {
             const removed = rawTrades.shift();
             processedTradeIds.delete(removed.id);
         }
@@ -1141,6 +1168,15 @@ document.addEventListener('click', (e) => {
             connectMotor();
         }
     }
+
+    // BOTÃO SNAP-BACK
+    const snapBtn = e.target.closest('#snap-back');
+    if (snapBtn) {
+        horizontalScroll = 0;
+        needsAutoScale = true;
+        needsHistoryRedraw = true;
+        draw();
+    }
 });
 
 // LÓGICA DE DESLIGAMENTO (SAÍDA)
@@ -1169,9 +1205,9 @@ if (connStatus) {
 const toolClear = document.getElementById('tool-clear');
 if (toolClear) {
     toolClear.onclick = () => {
-        if (!confirm("Deseja realmente LIMPAR tudo? Isso vai resetar o navegador e o banco de dados.")) return;
+        if (!confirm("Deseja realmente LIMPAR os negócios? Isso vai zerar o histórico no navegador e no banco de dados, mas manterá suas cores e configurações.")) return;
 
-        console.log("🗑️ LIMPANDO TUDO (HARD RESET)...");
+        console.log("🗑️ LIMPANDO NEGÓCIOS (RESET DE HISTÓRICO)...");
         // 1. Limpa Memória Local
         chartData = []; chartDataMap.clear(); processedTradeIds.clear(); rawTrades = [];
 
@@ -1181,16 +1217,18 @@ if (toolClear) {
         autoScale();
         draw();
 
-        // 3. Limpa LocalStorage (Zera as configurações também para garantir)
-        localStorage.clear();
-
-        // 4. Limpa Banco de Dados Remoto
-        fetch('/api/trades/clear', { method: 'DELETE' })
+        // 3. Limpa Banco de Dados Remoto (PostgreSQL)
+        fetch('/api/trades/clear', { method: 'POST' })
             .then(() => {
-                alert("SISTEMA RESETADO! A página será recarregada para garantir limpeza total.");
+                console.log("✅ Banco de dados limpo com sucesso.");
+                alert("HISTÓRICO ZERADO! O terminal será recarregado.");
                 window.location.reload();
             })
-            .catch(err => console.error("Erro ao limpar:", err));
+            .catch(err => {
+                console.error("Erro ao limpar banco:", err);
+                alert("Erro ao limpar banco de dados, mas a memória local foi zerada.");
+                window.location.reload();
+            });
     };
 }
 

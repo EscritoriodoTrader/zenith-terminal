@@ -761,3 +761,45 @@ body {
     0%, 100% { opacity: 1; transform: scale(1); }
     50% { opacity: 0.8; transform: scale(0.98); }
 }
+
+/* BOTÃO VOLTAR AO PRESENTE (SNAP BACK) */
+.snap-back-btn {
+    position: fixed;
+    top: 90px;
+    right: 85px; 
+    width: 36px;
+    height: 36px;
+    background: rgba(120, 123, 134, 0.4);
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: #fff;
+    cursor: pointer;
+    z-index: 1000;
+    opacity: 0;
+    pointer-events: none;
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
+}
+
+.snap-back-btn.visible {
+    opacity: 1;
+    pointer-events: auto;
+    transform: scale(1);
+}
+
+.snap-back-btn:not(.visible) {
+    transform: scale(0.8);
+}
+
+.snap-back-btn:hover {
+    background: rgba(120, 123, 134, 0.8);
+    transform: scale(1.15);
+}
+
+.snap-back-btn svg {
+    width: 20px;
+    height: 20px;
+}

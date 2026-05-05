@@ -94,7 +94,7 @@ async function insertTrades(trades) {
  */
 async function getTrades() {
     try {
-        const res = await pool.query("SELECT * FROM trades ORDER BY timestamp ASC LIMIT 20000");
+        const res = await pool.query("SELECT * FROM trades ORDER BY timestamp ASC");
         return res.rows;
     } catch (err) {
         console.error("[DB ERROR]: Erro ao buscar trades:", err);

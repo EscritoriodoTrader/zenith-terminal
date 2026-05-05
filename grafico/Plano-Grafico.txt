@@ -188,25 +188,28 @@ CSS:
 
 ---
 
-8. BARRA DE FERRAMENTAS (FLOATING TOOLBAR)
-Barra flutuante com os botoes de ferramentas.
+8. BARRA DE FERRAMENTAS & SNAP BACK (UI NAVIGATION)
+Recursos de interacao e navegacao do grafico.
 
-* Tamanho: Botoes de 34px.
-* Referencia: index.html:35 | zenith_style.css:259.
+* SNAP BACK (Voltar ao Presente):
+  - Botao circular cinza que surge no canto superior direito ao scrollar para o passado.
+  - Funcao: Zerar horizontalScroll.
+  - Referencia: index.html:24 | zenith_style.css:765 | zenith_core.js:346.
 
-TRECHO DO CODIGO
-----------------
+* BARRA DE FERRAMENTAS FLUTUANTE:
+  - Botoes de 34px posicionados no topo central.
+  - Referencia: index.html:35 | zenith_style.css:259.
+
+TRECHO DO CODIGO (Snap Back)
+---------------------------
 HTML:
-<!-- index.html - Linha 35 -->
-<div class="toolbar-float"> ... </div>
+<div id="snap-back" class="snap-back-btn"> ... </div>
 
 JavaScript:
-// zenith_core.js - Linha 573
-document.querySelectorAll('.tool-btn').forEach(btn => btn.classList.remove('active'));
+if (horizontalScroll > 20) snapBtn.classList.add('visible');
 
 CSS:
-/* zenith_style.css - Linha 259 */
-.toolbar-float { position: absolute; top: 15px; left: 50%; }
+.snap-back-btn { position: fixed; top: 90px; right: 85px; ... }
 
 ---
 
@@ -274,9 +277,29 @@ JavaScript:
 targetCtx.strokeStyle = c.close >= c.open ? posOutlineColor : negOutlineColor;
 targetCtx.strokeRect(x - uW/2, Math.min(yO, yC), uW, Math.max(1, Math.abs(yC - yO)));
 
-// zenith_core.js - Linha 520 (Fundo dos Numeros)
-targetCtx.fillStyle = footprintBgColor;
-targetCtx.fillRect(Math.round(x - bW/4), startY, Math.round(bW/2), boxH);
-
 CSS:
 /* Nao possui CSS direto, pois e renderizado via Canvas 2D */
+
+---
+
+12. ESCALA E AUTO-AJUSTE (SMART SCALE)
+Logica de enquadramento vertical das velas.
+
+* COMPORTAMENTO:
+  - Presente (isStudying = false): Deslocamento automatico (Panning) mantendo o zoom vertical.
+  - PRESERVACAO DE ZOOM: O sistema nao altera o tamanho da vela, apenas centraliza o preco.
+  - REGRA DE RESGATE: Se o preco fugir da tela, o isAutoScale e religado automaticamente.
+  - Estudo (Mao ou Cruz ativas): Escala fixa para permitir analise estatica.
+  - Tolerancia: Scroll > 30px tambem desativa o auto-ajuste.
+* Referencia: zenith_core.js:150 (Funcao autoScale) | zenith_core.js:346 (Monitoramento).
+
+TRECHO DO CODIGO
+----------------
+JavaScript:
+const isStudying = (activeTool === 'hand' || activeTool === 'cross' || horizontalScroll > 30);
+if (!isStudying && (currentP > priceMax || currentP < priceMin)) {
+    isAutoScale = true; // Resgate automático
+    needsAutoScale = true;
+}
+
+---

@@ -15,14 +15,23 @@ const wss = new WebSocket.Server({ server });
 
 let isMotorRunning = false;
 
+const SETTINGS_FILE = path.join(__dirname, 'settings.json');
+function getSettings() {
+    try { if (fs.existsSync(SETTINGS_FILE)) return JSON.parse(fs.readFileSync(SETTINGS_FILE)); } catch (e) {}
+    return {};
+}
+function saveSettings(s) {
+    try { fs.writeFileSync(SETTINGS_FILE, JSON.stringify(s, null, 2)); } catch (e) {}
+}
+
 // Inicialização do Banco com log de erro detalhado
 console.log("[INIT]: Iniciando servidor...");
 db.initDatabase()
     .then(() => console.log("[INIT]: Banco de dados pronto."))
-    .catch(err => {
-        console.error("❌ ERRO CRÍTICO NO BANCO:", err.message);
-        // Não mata o processo, deixa o servidor tentar subir
-    });
+    .catch(err => console.error("❌ ERRO CRÍTICO NO BANCO:", err.message));
+
+app.get('/api/settings', (req, res) => res.json(getSettings()));
+app.post('/api/settings', (req, res) => { saveSettings(req.body); res.sendStatus(200); });
 
 process.on('uncaughtException', (err) => {
     console.error('❌ ERRO NÃO TRATADO:', err);

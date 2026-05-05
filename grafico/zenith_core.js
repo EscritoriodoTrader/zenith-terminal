@@ -377,10 +377,12 @@ function draw() {
             ctx.save();
             ctx.strokeStyle = lastPriceLineColor || themeColor; 
             ctx.lineWidth = 1; 
-            ctx.setLineDash([5, 5]); // Tracejado elegante
+            ctx.setLineDash([5, 5]);
             ctx.beginPath();
-            ctx.moveTo(0, yL); // Começa no zero (borda esquerda)
-            ctx.lineTo(canvas.width / dpr, yL); // Vai até o fim (borda direita)
+            // Começa no centro da vela atual e vai até a régua de preço
+            const startX = (canvas.width / dpr - rightMargin) + horizontalScroll + (cW * 0.5);
+            ctx.moveTo(startX, yL); 
+            ctx.lineTo(canvas.width / dpr, yL); 
             ctx.stroke();
             ctx.restore();
         }
@@ -1078,16 +1080,17 @@ function drawChevronTag(ctx, y, color, textColor, text, width) {
     ctx.save();
     ctx.fillStyle = color;
     ctx.beginPath();
-    ctx.moveTo(width, y);
-    ctx.lineTo(width - 8, y - 9);
-    ctx.lineTo(0, y - 9);
-    ctx.lineTo(0, y + 9);
-    ctx.lineTo(width - 8, y + 9);
+    // Aponta para a ESQUERDA (em direção ao gráfico)
+    ctx.moveTo(0, y);
+    ctx.lineTo(8, y - 9);
+    ctx.lineTo(width, y - 9);
+    ctx.lineTo(width, y + 9);
+    ctx.lineTo(8, y + 9);
     ctx.closePath();
     ctx.fill();
     ctx.fillStyle = textColor;
     ctx.font = "bold 11px Arial";
     ctx.textAlign = "center";
-    ctx.fillText(text, width / 2, y + 4);
+    ctx.fillText(text, width / 2 + 3, y + 4);
     ctx.restore();
 }

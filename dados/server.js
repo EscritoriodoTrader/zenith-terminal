@@ -44,6 +44,8 @@ function broadcast(data) {
     });
 }
 
+app.get('/api/motor-status', (req, res) => res.json({ running: isMotorRunning }));
+
 app.delete('/api/trades/clear', async (req, res) => {
     await db.clearDatabase();
     broadcast({ type: 'CLEAR_CHART' });

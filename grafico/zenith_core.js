@@ -1,6 +1,6 @@
 /**
- * ZENITH TERMINAL - V7.4
- * BUFFER DE MEMÓRIA EXPANDIDO E SINCRONIA CRONOLÓGICA
+ * ZENITH TERMINAL - V7.5
+ * SINCRONIA DE FUSO HORÁRIO E LIMPEZA DE CACHE DE MEMÓRIA
  */
 
 // 1. CONFIGURAÇÃO E ELEMENTOS
@@ -1095,12 +1095,13 @@ function connectMotor() {
                 
                 const list = msg.trades || msg.data;
                 if (list && list.length > 0) {
-                    hasRealData = true; // Avisa o sistema que já temos preço real para escalar
+                    hasRealData = true;
                     processTrades(list);
-                    // CORREÇÃO CRÍTICA: Ordena do mais NOVO para o mais ANTIGO (Decrescente)
                     chartData.sort((a, b) => b.timestamp - a.timestamp);
                     
-                    // Força o auto-ajuste para encontrar os candles históricos no preço
+                    // LIMPEZA FORÇADA DE CACHE VISUAL (Garante que o F5 venha limpo)
+                    historyCanvasCache.width = historyCanvasCache.width; 
+                    needsHistoryRedraw = true;
                     needsAutoScale = true;
                     isAutoScale = true;
                 }

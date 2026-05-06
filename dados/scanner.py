@@ -17,7 +17,7 @@ SHEET_HISTORICO = "Historico"
 # Tenta usar Localhost se o server estiver rodando na mesma máquina
 LOCAL_SERVER = "127.0.0.1:10000"
 REMOTE_SERVER = "zenith-terminal-bvj4.onrender.com"
-SERVER_HOST = LOCAL_SERVER 
+SERVER_HOST = REMOTE_SERVER 
 
 # Detecta se é local ou remoto para o protocolo HTTP
 HTTP_PROTOCOL = "http" if "localhost" in SERVER_HOST or "127.0.0.1" in SERVER_HOST else "https"

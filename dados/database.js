@@ -98,7 +98,8 @@ async function insertTrades(trades) {
  */
 async function getTrades() {
     try {
-        const res = await pool.query("SELECT * FROM trades ORDER BY timestamp DESC LIMIT 50000");
+        // Buscamos em ordem CRESCENTE para que o limite de memória do gráfico (shift) remova os velhos e mantenha os novos
+        const res = await pool.query("SELECT * FROM trades ORDER BY timestamp ASC LIMIT 50000");
         return res.rows;
     } catch (err) {
         console.error("[DB ERROR]: Erro ao buscar trades:", err);

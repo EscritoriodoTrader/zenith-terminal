@@ -1,6 +1,6 @@
 /**
- * ZENITH TERMINAL - V7.3
- * ESTABILIDADE DE DADOS HISTÓRICOS E CONVERSÃO NUMÉRICA
+ * ZENITH TERMINAL - V7.4
+ * BUFFER DE MEMÓRIA EXPANDIDO E SINCRONIA CRONOLÓGICA
  */
 
 // 1. CONFIGURAÇÃO E ELEMENTOS
@@ -1143,8 +1143,8 @@ function processTrades(trades) {
         processedTradeIds.add(t.id);
         rawTrades.push(t);
 
-        // Limita o cache para evitar consumo excessivo de RAM (Mantém os últimos 50 mil)
-        if (rawTrades.length > 50000) {
+        // Limita o cache para evitar consumo excessivo de RAM (Mantém os últimos 100 mil)
+        if (rawTrades.length > 100000) {
             const removed = rawTrades.shift();
             processedTradeIds.delete(removed.id);
         }

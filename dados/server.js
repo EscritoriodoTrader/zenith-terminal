@@ -26,6 +26,8 @@ function getSettings() {
 function saveSettings(s) { try { fs.writeFileSync(SETTINGS_FILE, JSON.stringify(s, null, 4)); } catch (e) {} }
 
 // --- MOTOR PYTHON ---
+let scannerProcess = null;
+
 function startPythonScanner() {
     if (process.platform !== "win32") return;
     console.log("[SISTEMA]: Realizando faxina de processos fantasmas...");
@@ -35,7 +37,12 @@ function startPythonScanner() {
     } catch (e) {}
     
     console.log("[SISTEMA]: Iniciando novo motor de dados limpo...");
-    spawn('python', [path.join(__dirname, 'scanner.py')], { stdio: 'inherit', shell: true });
+    scannerProcess = spawn('python', [path.join(__dirname, 'scanner.py')], { stdio: 'inherit', shell: true });
+    
+    scannerProcess.on('exit', () => {
+        console.log("[SISTEMA]: Motor Python encerrado.");
+        scannerProcess = null;
+    });
 }
 
 // --- BROADCAST ---
@@ -51,26 +58,42 @@ wss.on('connection', async (ws, req) => {
     const type = userAgent.includes('Mozilla') ? 'NAVEGADOR' : 'MOTOR PYTHON';
     console.log(`[WS]: ${type} conectado com sucesso.`);
     
-    // Se for um navegador, envia o histórico inicial do banco
+    // Se for um navegador, o gráfico pedirá o histórico explicitamente via GET_HISTORY
     if (type === 'NAVEGADOR') {
-        const history = await db.getTrades();
-        if (history.length > 0) {
-            ws.send(JSON.stringify({ type: 'HISTORY_DATA', data: history }));
-        }
+        console.log(`[WS]: Terminal do Usuário conectado.`);
     }
 
     ws.on('message', async (message) => {
         try {
             const cmd = JSON.parse(message);
             if (cmd.type === 'SHUTDOWN') {
-                console.log("[WS]: Comando de desligamento recebido.");
-                try { if (process.platform === "win32") execSync('taskkill /F /IM python.exe', { stdio: 'ignore' }); } catch (e) {}
-                process.exit(0);
+                console.log("[WS]: Comando de desligamento recebido. Encerrando sistemas...");
+                
+                // 1. Avisa todos os clientes (inclusive o Python) para fechar
+                broadcast({ type: 'SHUTDOWN' });
+
+                // 2. Tenta matar o processo Python via referência
+                if (scannerProcess) {
+                    try {
+                        if (process.platform === "win32") {
+                            execSync(`taskkill /F /T /PID ${scannerProcess.pid}`, { stdio: 'ignore' });
+                        } else {
+                            scannerProcess.kill('SIGTERM');
+                        }
+                    } catch (e) { console.error("Erro ao matar scannerProcess:", e.message); }
+                }
+
+                // 3. Pequeno delay para garantir o envio das mensagens antes de sair
+                setTimeout(() => {
+                    console.log("[SISTEMA]: Terminal encerrado com sucesso.");
+                    process.exit(0);
+                }, 1000);
             } else if (cmd.type === 'GET_HISTORY') {
-                // Resposta direta ao pedido de histórico
-                console.log("[WS]: Enviando histórico solicitado pelo terminal.");
                 const history = await db.getTrades();
                 ws.send(JSON.stringify({ type: 'HISTORY_DATA', data: history }));
+            } else if (cmd.type === 'NEW_DATA' && cmd.data) {
+                db.insertTrades(cmd.data).catch(() => {});
+                broadcast(cmd);
             } else {
                 broadcast(cmd);
             }

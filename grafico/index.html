@@ -103,6 +103,14 @@
                 </div>
             </div>
         </main>
+
+        <!-- OVERLAY DE CARREGAMENTO (CORTINA) -->
+        <div id="waiting-data" class="waiting-data">
+            <div class="waiting-content">
+                <div class="waiting-spinner"></div>
+                <div class="waiting-text">AGUARDANDO DADOS...</div>
+            </div>
+        </div>
     </div>
 
     <!-- LUPA DE PESQUISA (PASSO 5 ORIGINAL RESTAURADO) -->
@@ -131,6 +139,7 @@
                     <div class="nav-tab active" data-tab="geral">Geral</div>
                     <div class="nav-tab" data-tab="aparencia">Aparência</div>
                     <div class="nav-tab" data-tab="filtro">Filtro</div>
+                    <div class="nav-tab" data-tab="atalhos">Atalhos</div>
                 </nav>
             </aside>
 
@@ -389,6 +398,67 @@
                             </button>
                         </section>
                     </div>
+
+                    <!-- ABA ATALHOS -->
+                    <div id="content-atalhos" class="tab-content">
+                        <!-- SEÇÃO: FERRAMENTAS -->
+                        <section class="settings-section">
+                            <div class="section-header">
+                                <span>Ferramentas</span>
+                                <div class="header-line"></div>
+                            </div>
+                            <div class="setting-grid">
+                                <div class="setting-item">
+                                    <label>Ferramenta Mão</label>
+                                    <input type="text" id="shortcut-hand" class="shortcut-input" readonly placeholder="Pressione uma tecla">
+                                </div>
+                                <div class="setting-item">
+                                    <label>Ferramenta Cruz</label>
+                                    <input type="text" id="shortcut-cross" class="shortcut-input" readonly placeholder="Pressione uma tecla">
+                                </div>
+                            </div>
+                        </section>
+
+                        <!-- SEÇÃO: NAVEGAÇÃO -->
+                        <section class="settings-section">
+                            <div class="section-header">
+                                <span>Navegação & Zoom</span>
+                                <div class="header-line"></div>
+                            </div>
+                            <div class="setting-grid">
+                                <div class="setting-item">
+                                    <label>Aumentar Zoom (+)</label>
+                                    <input type="text" id="shortcut-zoom-in" class="shortcut-input" readonly placeholder="Pressione uma tecla">
+                                </div>
+                                <div class="setting-item">
+                                    <label>Diminuir Zoom (-)</label>
+                                    <input type="text" id="shortcut-zoom-out" class="shortcut-input" readonly placeholder="Pressione uma tecla">
+                                </div>
+                            </div>
+                        </section>
+
+                        <!-- SEÇÃO: SISTEMA -->
+                        <section class="settings-section">
+                            <div class="section-header">
+                                <span>Sistema</span>
+                                <div class="header-line"></div>
+                            </div>
+                            <div class="setting-grid">
+                                <div class="setting-item">
+                                    <label>Ligar/Desligar Motor</label>
+                                    <input type="text" id="shortcut-motor" class="shortcut-input" readonly placeholder="Pressione uma tecla">
+                                </div>
+                                <div class="setting-item">
+                                    <label>Limpar Tudo (Reset)</label>
+                                    <input type="text" id="shortcut-reset" class="shortcut-input" readonly placeholder="Pressione uma tecla">
+                                </div>
+                                <div class="setting-item">
+                                    <label>Desligar Terminal</label>
+                                    <input type="text" id="shortcut-shutdown" class="shortcut-input" readonly placeholder="Pressione uma tecla">
+                                </div>
+                            </div>
+                        </section>
+                    </div>
                 </div>
                 <footer class="settings-footer">
                     <button id="cancel-settings" class="footer-btn cancel">Cancelar</button>
@@ -426,7 +496,7 @@
         </div>
     </div>
 
-    <script src="zenith_core.js?v=7.5"></script>
+    <script src="zenith_core.js?v=8.9.1"></script>
 </body>
 
 </html>

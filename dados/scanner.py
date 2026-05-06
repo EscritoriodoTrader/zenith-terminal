@@ -17,7 +17,7 @@ SHEET_HISTORICO = "Historico"
 # Tenta usar Localhost se o server estiver rodando na mesma máquina
 LOCAL_SERVER = "127.0.0.1:10000"
 REMOTE_SERVER = "zenith-terminal-bvj4.onrender.com"
-SERVER_HOST = REMOTE_SERVER 
+SERVER_HOST = LOCAL_SERVER 
 
 # Detecta se é local ou remoto para o protocolo HTTP
 HTTP_PROTOCOL = "http" if "localhost" in SERVER_HOST or "127.0.0.1" in SERVER_HOST else "https"
@@ -42,9 +42,11 @@ last_historical_ts = 0
 ws_client = None
 
 history_requested = False
+history_already_read = False
+sent_trades_buffer = set()
 
 def on_message(ws, message):
-    global is_active, ws_client, history_requested
+    global is_active, ws_client, history_requested, history_already_read, sent_trades_buffer
     ws_client = ws
     try:
         msg = json.loads(message)
@@ -53,8 +55,15 @@ def on_message(ws, message):
             is_active = msg.get('running', False)
             print(f"[COMANDO]: Motor {'LIGADO' if is_active else 'DESLIGADO'}")
         elif t == 'GET_HISTORY':
-            history_requested = True
-            print("[SISTEMA]: Solicitação de HISTÓRICO recebida.")
+            pass 
+        elif t == 'CLEAR_CHART':
+            history_already_read = False
+            sent_trades_buffer.clear()
+            print("[SISTEMA]: Comando de RESET recebido. Memória de IDs limpa e aba 'Historico' liberada.")
+        elif t == 'SHUTDOWN':
+            print("[SISTEMA]: Encerrando motor por comando remoto...")
+            import os
+            os._exit(0)
     except: pass
 
 def start_ws():
@@ -82,7 +91,7 @@ def start_ws():
             time.sleep(2)
     threading.Thread(target=run, daemon=True).start()
 
-start_ws()
+# start_ws() <- REMOVIDO: Agora é chamado dentro do loop principal para resiliência
 
 def tx_worker():
     print("[TX]: Canal de transmissão iniciado.")
@@ -211,6 +220,84 @@ def clean_variation(val):
         return n
     except: return 0.0
 
+# Bandeira para controle de leitura da aba 'Historico'
+history_already_read = False
+last_history_uid = None
+
+def normalize_side(val):
+    """Converte termos do Excel para o padrao BUY/SELL baseando-se na letra inicial"""
+    if not val: return "BUY"
+    s = str(val).upper().strip()
+    if s.startswith('V') or s.startswith('S'): return "SELL"
+    if s.startswith('C') or s.startswith('B'): return "BUY"
+    return "BUY"
+
+def read_excel_history(sent_buffer):
+    """
+    Lê a aba 'Historico' do Excel (Colunas A, C, D, F)
+    Mapping: A=Horário, C=Preço, D=Quantidade, F=Agressor
+    """
+    global history_already_read, last_history_uid
+    
+    try:
+        sheet_hist = get_sheet("Historico")
+        if not sheet_hist: return
+            
+        print("[SISTEMA]: Sincronizando aba 'Historico' com Precisão BlackArrow...")
+        data = sheet_hist.range("A2:F1000000").value
+        
+        hist_trades = []
+        temp_last_uid = None
+        now = datetime.datetime.now()
+        
+        # Contador para trades no mesmo milissegundo
+        ts_counters = {}
+        
+        for row in data:
+            # REGRA DE PARADA: Se os 4 campos vitais estiverem vazios, o histórico acabou.
+            if not row[0] and not row[2] and not row[3] and not row[5]:
+                break
+                
+            # Se a linha for parcialmente inválida, pula para a próxima mas não para o processo
+            if not row[0] or row[2] is None or row[3] is None:
+                continue
+                
+            ts, time_str = process_time(row[0], now)
+            p = clean_price(row[2])
+            q = int(float(str(row[3]).replace(',', '.')))
+            side = normalize_side(row[5])
+            
+            if len(hist_trades) < 5:
+                print(f"[DEBUG]: Lendo linha {len(hist_trades)+2} | Agressor Original: '{row[5]}' -> Traduzido para: {side}")
+            
+            # Gera ID Único com Sequência para não perder trades idênticos
+            base_id = f"{side}_{ts}_{p}_{q}"
+            ts_counters[base_id] = ts_counters.get(base_id, 0) + 1
+            uid = f"{base_id}_seq{ts_counters[base_id]}"
+            
+            if uid not in sent_buffer:
+                hist_trades.append({"id": uid, "timestamp": ts, "price": p, "quantity": q, "side": side})
+                sent_buffer.add(uid)
+                temp_last_uid = uid
+        
+        if hist_trades:
+            # SINAL DE INÍCIO: O Gráfico coloca a cortina
+            ws_client.send(json.dumps({"type": "START_HISTORY", "count": len(hist_trades)}))
+            
+            for i in range(0, len(hist_trades), 1000):
+                batch = hist_trades[i:i+1000]
+                ws_client.send(json.dumps({"type": "NEW_DATA", "asset": "HISTORICO", "data": batch}))
+            
+            # SINAL DE FIM: O Gráfico processa tudo e sobe a cortina
+            ws_client.send(json.dumps({"type": "END_HISTORY"}))
+            
+            last_history_uid = temp_last_uid
+            print(f"[SISTEMA]: {len(hist_trades)} trades sincronizados.")
+        
+        history_already_read = True
+    except Exception as e:
+        print(f"[ERRO HISTORICO]: {e}")
+
 def read_historical_data(sent_buffer):
     """Lê a aba Histórico para carregar o passado"""
     global last_historical_ts
@@ -248,12 +335,11 @@ def read_historical_data(sent_buffer):
         tx_queue.put({"data": hist_trades, "lastPrice": hist_trades[-1]['price'], "variation": 0})
 
 def main():
-    global last_historical_ts
-    print("--- ZENITH SCANNER V5.6: MOTOR RESTAURADO ---")
+    global last_historical_ts, history_already_read, sent_trades_buffer, is_active
+    print("--- ZENITH SCANNER V6.9.1: MOTOR SINCRONIZADO ---")
     threading.Thread(target=tx_worker, daemon=True).start()
     
     sheet_rtd = None
-    sent_trades_buffer = set()
     last_price_sent = 0
     last_variation_sent = -999
     historical_loaded = False
@@ -273,10 +359,9 @@ def main():
                 time.sleep(1)
                 continue
 
-            if not historical_loaded:
-                print(f"[{datetime.datetime.now().strftime('%H:%M:%S')}] Motor Ligado! Carregando histórico inicial...")
-                # clear_database() <- REMOVIDO: Para não apagar o banco no F5
-                read_historical_data(sent_trades_buffer)
+            if not history_already_read and is_active:
+                print(f"[{datetime.datetime.now().strftime('%H:%M:%S')}] Motor Ligado! Carregando aba 'Historico'...")
+                read_excel_history(sent_trades_buffer)
                 historical_loaded = True
 
             if not sheet_rtd:
@@ -312,43 +397,51 @@ def main():
             
             new_trades = []
             now = datetime.datetime.now()
-            counters = {}
+            ts_counters = {}
 
             global history_requested
             for row in data:
                 if not row: continue
 
-                # 1. PROCESSA BLOCO COMPRA (A, B, C, D)
-                if len(row) > 2 and row[0] and row[1] and row[2]:
-                    ts, time_str = process_time(row[0], now)
-                    if ts and ts >= last_historical_ts:
-                        try:
+                # COMPRAS (Coluna A-D)
+                try:
+                    if row[0] and row[1] and row[2]:
+                        ts, time_str = process_time(row[0], now)
+                        if ts and ts >= last_historical_ts:
                             p = clean_price(row[1])
                             q = int(float(str(row[2]).replace(',', '.')))
-                            uid = f"BUY_{ts}_{p}_{q}"
-                            if uid not in sent_trades_buffer or history_requested:
-                                new_trades.append({"id": uid, "timestamp": ts, "price": p, "quantity": q, "side": "BUY"})
+                            side = "BUY"
+                            
+                            base_id = f"{side}_{ts}_{p}_{q}"
+                            ts_counters[base_id] = ts_counters.get(base_id, 0) + 1
+                            uid = f"{base_id}_seq{ts_counters[base_id]}"
+                            
+                            if uid not in sent_trades_buffer:
+                                new_trades.append({"id": uid, "timestamp": ts, "price": p, "quantity": q, "side": side})
                                 sent_trades_buffer.add(uid)
-                        except Exception as e:
-                            pass
+                except Exception as e:
+                    pass
 
-                # 2. PROCESSA BLOCO VENDA (G, H, I, J)
-                if len(row) > 8 and row[6] and row[7] and row[8]:
-                    ts, time_str = process_time(row[6], now)
-                    if ts and ts >= last_historical_ts:
-                        try:
+                # VENDAS (Coluna G-J)
+                try:
+                    if row[6] and row[7] and row[8]:
+                        ts, time_str = process_time(row[6], now)
+                        if ts and ts >= last_historical_ts:
                             p = clean_price(row[7])
                             q = int(float(str(row[8]).replace(',', '.')))
-                            uid = f"SELL_{ts}_{p}_{q}"
-                            if uid not in sent_trades_buffer or history_requested:
-                                new_trades.append({"id": uid, "timestamp": ts, "price": p, "quantity": q, "side": "SELL"})
+                            side = "SELL"
+                            
+                            base_id = f"{side}_{ts}_{p}_{q}"
+                            ts_counters[base_id] = ts_counters.get(base_id, 0) + 1
+                            uid = f"{base_id}_seq{ts_counters[base_id]}"
+                            
+                            if uid not in sent_trades_buffer:
+                                new_trades.append({"id": uid, "timestamp": ts, "price": p, "quantity": q, "side": side})
                                 sent_trades_buffer.add(uid)
-                        except Exception as e:
-                            pass
+                except Exception as e:
+                    pass
 
-            if history_requested:
-                print(f"[SISTEMA]: Histórico enviado ({len(new_trades)} trades).")
-                history_requested = False
+            # Sincronização de histórico finalizada
 
             if len(sent_trades_buffer) > 40000:
                 sent_trades_buffer = set(list(sent_trades_buffer)[-20000:])
@@ -382,7 +475,22 @@ def main():
             time.sleep(1)
 
 if __name__ == "__main__":
-    try:
-        main()
-    except KeyboardInterrupt:
-        print("\n👋 Sistema finalizado pelo usuário. Até logo!")
+    while True:
+        try:
+            print("\n" + "="*50)
+            print("🚀 ZENITH SCANNER V6.0: MOTOR DE ALTA RESILIÊNCIA")
+            print("="*50)
+            
+            # Limpa instâncias antigas e reinicia o rádio
+            start_ws()
+            
+            # Inicia o motor de leitura
+            main()
+            
+        except KeyboardInterrupt:
+            print("\n[SISTEMA]: Encerrando pelo usuário...")
+            break
+        except Exception as e:
+            print(f"\n[ERRO CRÍTICO NO MOTOR]: {e}")
+            print("[SISTEMA]: Reiniciando motor completo em 5 segundos...")
+            time.sleep(5)

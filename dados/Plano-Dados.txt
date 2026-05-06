@@ -1,83 +1,55 @@
-# ZENITH TERMINAL - PLANO DE ARQUITETURA DE DADOS v1.1
-# Este documento é o mapa oficial de como os dados fluem do Excel para o Gráfico.
+# ZENITH TERMINAL - PLANO DE ARQUITETURA DE DADOS v1.2 (PRODUÇÃO)
+# Este documento é o mapa oficial e final da estabilidade alcançada na v8.1.
 
 ========================================================================
-1. FONTE: EXCEL (Aba: 'Dados_RTD')
+1. FONTES DE DADOS (EXCEL: Fluxo.xlsm)
 ========================================================================
-O sistema lê os dados em tempo real da planilha Excel via biblioteca xlwings.
 
-* CABEÇALHO (Informações do Ativo):
-  - [C2] : Preço Atual (Last Price)
-  - [H2] : Variação Percentual (%)
-  - [A2] : Nome do Ativo (ex: NQM6)
+* ABA 'HISTORICO':
+  - Função: Carregar o passado manualmente colado pelo trader.
+  - Colunas: A (Horário), C (Preço), D (Qtd), F (Agressor: Vendedor/Comprador).
+  - Gatilho: Lida apenas no primeiro "Start" ou após o botão de Reset (Lixeira).
+  - Capacidade: ILIMITADO (O motor lê até encontrar a primeira linha 100% vazia).
 
-* TABELA DE COMPRAS (Times & Trades):
-  - Range: A8:D507
-  - Coluna A: Horário (Data/Hora)
-  - Coluna B: Preço do Negócio
-  - Coluna C: Quantidade (Lotes)
+* ABA 'DADOS_RTD':
+  - Função: Fluxo de dados em tempo real (Tempo Real).
+  - Estrutura: Duas tabelas paralelas (Compras A8:D507 | Vendas G8:J507).
+  - Sincronia: O motor varre 1000 linhas a cada 0.001s.
 
-* BANCO DE DADOS: PostgreSQL (Supabase)
-  - Persistencia: Todos os trades via NEW_DATA sao salvos permanentemente.
-  - Recuperacao: O servidor envia HISTORY_DATA (ultimos 20.000 trades) no F5.
-  - Limpeza: Apenas via comando manual (SHUTDOWN / CLEAR).
-
-* TABELA DE VENDAS (Times & Trades):
-  - Range: G8:J507
-  - Coluna G: Horário (Data/Hora)
-  - Coluna H: Preço do Negócio
-  - Coluna I: Quantidade (Lotes)
+* PRECISÃO BLACKARROW (Deduplicação Inteligente):
+  - Sistema de IDs: Cada trade gera um ID único: {Lado}_{Timestamp}_{Preço}_{Qtd}_seq{N}.
+  - Regra de Ouro: O sufixo '_seq' permite que múltiplos trades idênticos no mesmo milissegundo sejam somados individualmente, garantindo paridade total de volume.
 
 ========================================================================
-2. MOTOR: PYTHON (scanner.py) - ENDEREÇOS VITAIS
+2. MOTOR DE RESILIÊNCIA (PYTHON: scanner.py)
 ========================================================================
-* L. 13 : Nome do arquivo Excel alvo ("Fluxo.xlsm").
-* L. 20 : Alternância entre LOCAL e REMOTE (Render).
-* L. 46 : on_message() -> Recebe ordens do Gráfico (GET_HISTORY / TOGGLE_MOTOR).
-* L. 91 : tx_worker() -> O "Carteiro" que envia dados para o servidor via WebSocket.
-* L. 159: clean_price() -> A lógica que remove pontos/vírgulas do Excel.
-* L. 320: O Loop principal que varre as 507 linhas a cada 0.001s.
+
+* BLINDAGEM: Envolvido em um loop de auto-recuperação global. 
+* COMPORTAMENTO: Se o Excel travar ou a conexão cair, o motor se reinicia sozinho em 5 segundos.
+* PONTE: Após ler a aba 'Historico', o motor emenda na aba 'Dados_RTD' filtrando duplicados via cache de memória (buffer de 40.000 IDs).
 
 ========================================================================
-3. SERVIDOR: NODE.JS (server.js) - ENDEREÇOS VITAIS
+3. SERVIDOR DE PERSISTÊNCIA (NODE.JS: server.js)
 ========================================================================
-* L. 10 : WebSocket Server (wss) -> Onde o rádio se conecta.
-* L. 25 : startPythonScanner() -> A "Vassoura" que mata processos órfãos e religa o motor.
-* L. 30 : TASKKILL -> Comando que limpa o PC de instâncias fantasmas.
-* L. 41 : broadcast() -> Função que replica o dado para todos os navegadores.
-* L. 70 : app.post('/api/trades') -> Porta de entrada para salvar dados no banco/cache.
+
+* ARQUIVISTA: Salva 100% dos trades recebidos via WebSocket diretamente no Supabase.
+* RECUPERAÇÃO: Ao dar F5 ou mudar o tempo gráfico, o servidor entrega 100% do histórico do banco de dados para o navegador.
+* LIMPEZA: O histórico do banco só é apagado via comando manual no botão de Reset (Lixeira).
 
 ========================================================================
-4. INFRAESTRUTURA E NUVEM
+4. FRONTEND PERSISTENTE (JS: zenith_core.js v8.1)
 ========================================================================
-* REPOSITÓRIO (Git): Código versionado para garantir que nunca percamos o progresso.
-* HOSPEDAGEM (Render): zenith-terminal-bvj4.onrender.com
-  - O Render hospeda o 'server.js'.
-  - O motor Python (scanner.py) roda LOCALMENTE na sua máquina (Windows) para acessar o Excel.
+
+* FILOSOFIA ZERO DATA LOSS: O gráfico não apaga a memória local ao receber histórico. Ele mescla o banco com o tempo real.
+* ESCALONAMENTO: Auto-ajuste de escala baseado no último preço disponível para evitar telas em branco.
+* SEQUÊNCIA VISUAL (v8.4):
+  - Estado 1: "AGUARDANDO DADOS..." (Imediato no clique).
+  - Estado 2: "MONTANDO O GRÁFICO..." (Sinal START_HISTORY do Python).
+  - Estado 3: Revelação total (Sinal END_HISTORY do Python após processar todos os blocos).
 
 ========================================================================
-5. PROTOCOLO DE MENSAGENS (JSON)
+5. INFRAESTRUTURA
 ========================================================================
-{
-  "type": "NEW_DATA",
-  "asset": "NQM6",
-  "lastPrice": 28150.25,
-  "variation": 1.55,
-  "data": [
-    {"id": "BUY_12345", "timestamp": 1714900000, "price": 28150.25, "quantity": 5, "side": "BUY"},
-    ...
-  ]
-}
-
-========================================================================
-6. REGRAS DE OURO (NÃO ALTERAR SEM CONSULTAR)
-========================================================================
-1. NUNCA mude o nome da aba 'Dados_RTD' no Excel.
-2. O Preço deve estar SEMPRE na coluna C2 para o cabeçalho.
-3. Se o Rádio ficar VERMELHO: O server.js caiu ou o Render está hibernando.
-4. Se o Rádio ficar VERDE mas não tiver velas: O scanner.py está desligado.
-5. F5 (Refresh): O gráfico envia 'GET_HISTORY' (L. 55 do scanner.py) para recuperar dados.
-
-========================================================================
-ESTABILIDADE ALCANÇADA: 05/05/2026 - Versão de Engenharia v1.1
-========================================================================
+* LOCALHOST: Porta 10000 (Ambiente de desenvolvimento e laboratório).
+* RENDER: zenith-terminal-bvj4.onrender.com (Ambiente de produção em nuvem).
+* DATABASE: PostgreSQL (Supabase) - Onde o passado é imortalizado.

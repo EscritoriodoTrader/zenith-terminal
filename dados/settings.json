@@ -6,17 +6,17 @@
     "currentTimeframe": "1Min",
     "filters": [
         {
-            "balance": 50,
+            "balance": 150,
             "color": "#fee2a4",
             "opacity": 100
         },
         {
-            "balance": 100,
+            "balance": 200,
             "color": "#f9cc6c",
             "opacity": 75
         },
         {
-            "balance": 200,
+            "balance": 300,
             "color": "#f5be47",
             "opacity": 75
         },

@@ -1,6 +1,6 @@
 /**
- * ZENITH TERMINAL - V7.5
- * SINCRONIA DE FUSO HORÁRIO E LIMPEZA DE CACHE DE MEMÓRIA
+ * ZENITH TERMINAL - V8.7
+ * MOTOR HÍBRIDO - TEMPO E PONTOS (P)
  */
 
 // 1. CONFIGURAÇÃO E ELEMENTOS
@@ -138,6 +138,15 @@ let needsHistoryRedraw = true;
 let externalLastPrice = 0;
 let needsScaleRedraw = true; // Flag para réguas
 let needsAutoScale = true; // Flag para escala controlada
+let shortcuts = JSON.parse(localStorage.getItem('zenith_shortcuts')) || {
+    hand: 'KeyH',
+    cross: 'KeyC',
+    zoomIn: 'Equal',
+    zoomOut: 'Minus',
+    reset: 'Delete',
+    motor: 'KeyP',
+    shutdown: 'KeyX'
+};
 
 const historyCanvasCache = document.createElement('canvas');
 const historyCtxCache = historyCanvasCache.getContext('2d', { alpha: true });
@@ -638,7 +647,8 @@ function drawSingleCandle(targetCtx, c, i, range, cW, tickH) {
             filters.forEach(f => {
                 if (Math.abs(s) >= f.balance) {
                     targetCtx.fillStyle = hexToRgba(f.color, f.opacity);
-                    targetCtx.fillRect(Math.round(x - bW / 4) - 15, y - 6.5, 15, 13);
+                    const filterWidth = (uW / 2) - (bW / 4);
+                    targetCtx.fillRect(x - uW / 2, y - 6.5, filterWidth, 13);
                 }
             });
         }
@@ -677,26 +687,68 @@ function drawSingleCandle(targetCtx, c, i, range, cW, tickH) {
 }
 
 // 8. INTERATIVIDADE E UI
+// 8. INTERATIVIDADE E UI
 canvas.onwheel = (e) => {
     e.preventDefault();
-    const dpr = window.devicePixelRatio || 1;
-    const cW = (canvas.width / dpr - rightMargin) / visibleCandles;
-
-    if (activeTool === 'hand') {
-        // MÃO SELECIONADA: ZOOM (Abre/Fecha Escala)
-        visibleCandles *= (e.deltaY > 0 ? 1.1 : 0.9);
-        visibleCandles = Math.min(100, Math.max(1, visibleCandles));
+    const rect = canvas.getBoundingClientRect();
+    const mX = (e.clientX - rect.left) * (canvas.width / rect.width);
+    
+    if (e.ctrlKey) {
+        // Zoom Vertical (Preço)
+        const delta = e.deltaY > 0 ? -2 : 2;
+        verticalZoom = Math.max(10, Math.min(100, verticalZoom + delta));
     } else {
-        // MIRA OU PADRÃO: SCROLL (Move para frente/trás)
-        const scrollSpeed = cW * 2; // Move 2 velas por "clique" do scroll
-        horizontalScroll += (e.deltaY > 0 ? -scrollSpeed : scrollSpeed);
+        // Zoom Horizontal (Tempo) ancorado no Cursor
+        handleZoom(e.deltaY < 0 ? 1 : -1, mX);
     }
-
+    needsAutoScale = true;
     needsHistoryRedraw = true;
-    needsScaleRedraw = true;
-}, { passive: false };
-canvas.onmousemove = (e) => { const rect = canvas.getBoundingClientRect(); mousePos.x = e.clientX - rect.left; mousePos.y = e.clientY - rect.top; if (isDrag) { const dX = e.clientX - lX, dY = e.clientY - lY; lX = e.clientX; lY = e.clientY; horizontalScroll += dX; if (Math.abs(dY) > 2) isAutoScale = false; const r = priceMax - priceMin; priceMax += (dY / canvas.height) * r; priceMin += (dY / canvas.height) * r; needsHistoryRedraw = true; needsScaleRedraw = true; } };
-canvas.onmousedown = (e) => { if (isModalOpen()) return; if (activeTool === 'hand') { isDrag = true; lX = e.clientX; lY = e.clientY; canvas.style.cursor = 'grabbing'; } };
+    draw();
+};
+
+canvas.onmousemove = (e) => {
+    const rect = canvas.getBoundingClientRect();
+    mousePos.x = (e.clientX - rect.left) * (canvas.width / rect.width);
+    mousePos.y = (e.clientY - rect.top) * (canvas.height / rect.height);
+    
+    if (isDrag) {
+        const dX = e.clientX - lX;
+        const dY = e.clientY - lY;
+        lX = e.clientX;
+        lY = e.clientY;
+        
+        horizontalScroll += dX;
+        
+        // Se arrastar verticalmente, desativa o auto-ajuste temporariamente
+        if (Math.abs(dY) > 2) isAutoScale = false;
+        
+        const r = priceMax - priceMin;
+        const priceDelta = (dY / canvas.height) * r;
+        priceMax += priceDelta;
+        priceMin += priceDelta;
+        
+        needsHistoryRedraw = true;
+        needsScaleRedraw = true;
+        draw();
+    }
+};
+
+canvas.onmousedown = (e) => {
+    if (isModalOpen()) return;
+    if (activeTool === 'hand' || e.button === 0) {
+        isDrag = true;
+        lX = e.clientX;
+        lY = e.clientY;
+        canvas.style.cursor = 'grabbing';
+    }
+};
+
+canvas.onmouseup = () => {
+    isDrag = false;
+    if (activeTool === 'hand') canvas.style.cursor = 'grab';
+    else if (activeTool === 'cross') canvas.style.cursor = 'crosshair';
+    else canvas.style.cursor = 'default';
+};
 window.onmouseup = () => { isDrag = false; canvas.style.cursor = activeTool === 'hand' ? 'grab' : (activeTool === 'cross' ? 'crosshair' : 'default'); };
 scaleCanvas.onmousedown = (e) => { if (isModalOpen()) return; isDragS = true; lSY = e.clientY; };
 window.addEventListener('mousemove', (e) => {
@@ -799,6 +851,10 @@ document.querySelectorAll('.nav-tab').forEach(tab => {
         document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
         document.getElementById('content-' + target).classList.add('active');
         document.getElementById('current-tab-title').innerText = tab.innerText;
+
+        if (target === 'atalhos') {
+            initShortcutRecording();
+        }
     };
 });
 
@@ -806,8 +862,8 @@ document.querySelectorAll('.nav-tab').forEach(tab => {
 document.getElementById('tool-cross').onclick = () => { activeTool = activeTool === 'cross' ? 'none' : 'cross'; canvas.style.cursor = activeTool === 'cross' ? 'crosshair' : 'default'; updateToolUI(); };
 document.getElementById('tool-hand').onclick = () => { activeTool = activeTool === 'hand' ? 'none' : 'hand'; canvas.style.cursor = activeTool === 'hand' ? 'grab' : 'default'; updateToolUI(); };
 document.getElementById('tool-search').onclick = () => { searchOverlay.classList.add('active'); searchInput.value = ''; searchInput.focus(); };
-document.getElementById('tool-zoom-in').onclick = () => { visibleCandles *= 0.8; if (visibleCandles < 1) visibleCandles = 1; autoScale(); };
-document.getElementById('tool-zoom-out').onclick = () => { visibleCandles *= 1.2; if (visibleCandles > 100) visibleCandles = 100; autoScale(); };
+document.getElementById('tool-zoom-in').onclick = () => handleZoom(1);
+document.getElementById('tool-zoom-out').onclick = () => handleZoom(-1);
 document.getElementById('conn-status').onclick = function () { this.classList.toggle('on'); this.classList.toggle('off'); };
 // Sincronização em tempo real e salvamento individual
 function updatePickerUI(input) {
@@ -973,8 +1029,8 @@ window.addEventListener('keydown', (e) => {
         settingsOverlay.classList.remove('active');
         searchOverlay.classList.remove('active');
     }
-    // Atalho: Digitar para pesquisar
-    if (!isModalOpen() && /^[a-z0-9]$/i.test(e.key)) {
+    // Atalho: Digitar para pesquisar (Apenas Números ou 'P' para Pontos)
+    if (!isModalOpen() && !e.ctrlKey && !e.altKey && /^[0-9p]$/i.test(e.key)) {
         searchOverlay.classList.add('active');
         searchInput.value = e.key.toUpperCase();
         searchInput.focus();
@@ -1039,14 +1095,16 @@ function connectMotor() {
                 }
 
                 if (wasOff && msg.running && socket.readyState === WebSocket.OPEN) {
-                    socket.send(JSON.stringify({ type: 'GET_HISTORY' }));
+                    console.log("[WS]: Motor religado. Sincronia mantida.");
                 }
             }
 
             if (msg.type === 'MARKET_DATA' || msg.type === 'NEW_TRADES' || msg.type === 'NEW_DATA') {
-                // Limpeza agressiva de avisos
-                const ov = document.getElementById('waiting-data') || document.querySelector('.waiting-data-overlay');
-                if (ov) ov.style.display = 'none';
+                // Limpeza de avisos (SÓ ESCONDE SE NÃO FOR HISTÓRICO)
+                if (msg.asset !== "HISTORICO") {
+                    const ov = document.getElementById('waiting-data');
+                    if (ov) ov.style.display = 'none';
+                }
                 // Atualiza o Ativo e Variação vindo do Excel (A2 e H2)
                 if (msg.asset) {
                     const assetElem = document.querySelector('.asset-name');
@@ -1086,27 +1144,47 @@ function connectMotor() {
                 needsScaleRedraw = true;
             }
 
-            if (msg.type === 'HISTORICAL_TRADES' || msg.type === 'HISTORY_DATA') {
-                // Limpa o estado local para receber o histórico puro do banco
-                chartData = []; 
-                chartDataMap.clear(); 
-                processedTradeIds.clear(); 
-                rawTrades = [];
-                
-                const list = msg.trades || msg.data;
-                if (list && list.length > 0) {
-                    hasRealData = true;
-                    processTrades(list);
-                    chartData.sort((a, b) => b.timestamp - a.timestamp);
+            if (msg.type === 'START_HISTORY') {
+                const ov = document.getElementById('waiting-data');
+                if (ov) {
+                    ov.style.display = 'flex';
+                    const textElem = ov.querySelector('.waiting-text');
+                    if (textElem) textElem.innerText = "MONTANDO O GRÁFICO...";
+                }
+                // Limpa o estado para receber o novo bloco massivo
+                chartData = []; chartDataMap.clear(); processedTradeIds.clear(); rawTrades = [];
+            }
+
+            if (msg.type === 'END_HISTORY') {
+                setTimeout(() => {
+                    reaggregateChart();
                     
-                    // LIMPEZA FORÇADA DE CACHE VISUAL (Garante que o F5 venha limpo)
+                    if (!hasRealData && chartData.length > 0) {
+                        hasRealData = true;
+                        const lastC = chartData[0];
+                        externalLastPrice = lastC.close;
+                        autoScale();
+                    }
+                    
+                    const ov = document.getElementById('waiting-data');
+                    if (ov) ov.style.display = 'none';
+
                     historyCanvasCache.width = historyCanvasCache.width; 
                     needsHistoryRedraw = true;
-                    needsAutoScale = true;
-                    isAutoScale = true;
+                    draw();
+                }, 500); 
+            }
+
+            if (msg.type === 'HISTORICAL_TRADES' || msg.type === 'HISTORY_DATA') {
+                const list = msg.trades || msg.data;
+                if (list && list.length > 0) {
+                    // Se for um bloco único do servidor, faz o processo completo
+                    processTrades(list);
+                    reaggregateChart();
+                    const ov = document.getElementById('waiting-data');
+                    if (ov) ov.style.display = 'none';
+                    draw();
                 }
-                needsHistoryRedraw = true;
-                draw();
             }
 
             if (msg.type === 'NEW_TRADES' || msg.type === 'NEW_TRADE' || msg.type === 'NEW_DATA') {
@@ -1131,21 +1209,28 @@ function connectMotor() {
 function processTrades(trades) {
     if (!trades || !Array.isArray(trades)) return;
 
-    let tfMin = parseInt(currentTimeframe) || 5;
-    if (currentTimeframe.toUpperCase().includes('H')) tfMin *= 60;
-    if (currentTimeframe.toUpperCase().includes('D')) tfMin *= 1440;
-    const tfMs = tfMin * 60 * 1000;
+    const isPointChart = currentTimeframe.toUpperCase().endsWith('P');
     let addedNewCandle = false;
+
+    const tickValue = 0.25;
+    const ticksPerCandle = isPointChart ? (parseInt(currentTimeframe) || 10) : 0;
+    const pointLimit = ticksPerCandle * tickValue;
+
+    let tfMs = 0;
+    if (!isPointChart) {
+        let tfMin = parseInt(currentTimeframe) || 5;
+        if (currentTimeframe.toUpperCase().includes('H')) tfMin *= 60;
+        if (currentTimeframe.toUpperCase().includes('D')) tfMin *= 1440;
+        tfMs = tfMin * 60 * 1000;
+    }
 
     trades.forEach(t => {
         if (t.price > 1000000) t.price = t.price / 10;
-        
         if (!t.id || processedTradeIds.has(t.id)) return;
         processedTradeIds.add(t.id);
         rawTrades.push(t);
 
-        // Limita o cache para evitar consumo excessivo de RAM (Mantém os últimos 100 mil)
-        if (rawTrades.length > 100000) {
+        if (rawTrades.length > 1000000) {
             const removed = rawTrades.shift();
             processedTradeIds.delete(removed.id);
         }
@@ -1153,42 +1238,96 @@ function processTrades(trades) {
         const ts = Number(t.timestamp);
         if (isNaN(ts)) return;
 
-        const candleTime = Math.floor(ts / tfMs) * tfMs;
-        let candle = chartDataMap.get(candleTime);
+        if (isPointChart) {
+            // No Gráfico de Pontos, o mais novo é SEMPRE o chartData[0]
+            let candle = chartData[0];
 
-        if (!candle) {
-            candle = {
-                timestamp: new Date(candleTime),
-                open: t.price, high: t.price, low: t.price, close: t.price,
-                ticks: {}, maxV: 0
-            };
-            chartData.push(candle);
-            chartDataMap.set(candleTime, candle);
-            addedNewCandle = true;
+            if (!candle) {
+                candle = {
+                    timestamp: new Date(ts),
+                    open: t.price, high: t.price, low: t.price, close: t.price,
+                    ticks: {}, maxV: 0, isPoint: true
+                };
+                chartData.unshift(candle);
+                addedNewCandle = true;
+            }
+
+            let currentPrice = t.price;
+            let finishedProcessingTrade = false;
+
+            while (!finishedProcessingTrade) {
+                const diff = currentPrice - candle.open;
+
+                if (Math.abs(diff) >= pointLimit) {
+                    const direction = diff > 0 ? 1 : -1;
+                    candle.close = candle.open + (direction * pointLimit);
+                    
+                    if (direction > 0) candle.high = Math.max(candle.high, candle.close);
+                    else candle.low = Math.min(candle.low, candle.close);
+
+                    const nextOpen = candle.close;
+                    candle = {
+                        timestamp: new Date(ts),
+                        open: nextOpen, high: nextOpen, low: nextOpen, close: nextOpen,
+                        ticks: {}, maxV: 0, isPoint: true
+                    };
+                    chartData.unshift(candle); // NOVO CANDLE NO TOPO
+                    addedNewCandle = true;
+                } else {
+                    candle.close = currentPrice;
+                    if (currentPrice > candle.high) candle.high = currentPrice;
+                    if (currentPrice < candle.low) candle.low = currentPrice;
+
+                    const pS = currentPrice.toFixed(2);
+                    if (!candle.ticks[pS]) candle.ticks[pS] = { buy: 0, sell: 0, p: currentPrice };
+                    if (t.side.toUpperCase() === 'BUY') candle.ticks[pS].buy += t.quantity;
+                    else candle.ticks[pS].sell += t.quantity;
+
+                    const totalV = candle.ticks[pS].buy + candle.ticks[pS].sell;
+                    if (totalV > (candle.maxV || 0)) candle.maxV = totalV;
+                    
+                    finishedProcessingTrade = true;
+                }
+            }
+        } else {
+            const candleTime = Math.floor(ts / tfMs) * tfMs;
+            let candle = chartDataMap.get(candleTime);
+
+            if (!candle) {
+                candle = {
+                    timestamp: new Date(candleTime),
+                    open: t.price, high: t.price, low: t.price, close: t.price,
+                    ticks: {}, maxV: 0
+                };
+                chartData.push(candle);
+                chartDataMap.set(candleTime, candle);
+                addedNewCandle = true;
+            }
+
+            candle.close = t.price;
+            if (t.price > candle.high) candle.high = t.price;
+            if (t.price < candle.low) candle.low = t.price;
+
+            const pS = t.price.toFixed(2);
+            if (!candle.ticks[pS]) candle.ticks[pS] = { buy: 0, sell: 0, p: t.price };
+            if (t.side.toUpperCase() === 'BUY') candle.ticks[pS].buy += t.quantity;
+            else candle.ticks[pS].sell += t.quantity;
+
+            const totalV = candle.ticks[pS].buy + candle.ticks[pS].sell;
+            if (totalV > (candle.maxV || 0)) candle.maxV = totalV;
         }
-
-        candle.close = t.price;
-        if (t.price > candle.high) candle.high = t.price;
-        if (t.price < candle.low) candle.low = t.price;
-
-        const pS = t.price.toFixed(2);
-        if (!candle.ticks[pS]) candle.ticks[pS] = { buy: 0, sell: 0, p: t.price };
-        if (t.side.toUpperCase() === 'BUY') candle.ticks[pS].buy += t.quantity;
-        else candle.ticks[pS].sell += t.quantity;
-
-        const totalV = candle.ticks[pS].buy + candle.ticks[pS].sell;
-        if (totalV > (candle.maxV || 0)) candle.maxV = totalV;
     });
 
     if (addedNewCandle) {
-        chartData.sort((a, b) => b.timestamp.getTime() - a.timestamp.getTime());
+        // SÓ organiza para Gráficos de TEMPO. 
+        // Pontos já estão na ordem correta via unshift()
+        if (!isPointChart) {
+            chartData.sort((a, b) => b.timestamp.getTime() - a.timestamp.getTime());
+        }
+        
         needsHistoryRedraw = true;
         needsScaleRedraw = true;
-
-        // FORÇA O PULO PARA O PREÇO REAL (Não deixa as velas escondidas)
-        if (chartData.length > 0) {
-            autoScale();
-        }
+        if (chartData.length > 0) autoScale();
     }
 }
 
@@ -1246,6 +1385,20 @@ document.addEventListener('click', (e) => {
         updateMotorUI();
         setStorage('zenith_motor', motorStatus);
 
+        if (newStatus === 'on') {
+            // FASE 1: AGUARDANDO DADOS (IMEDIATO NO CLIQUE)
+            const ov = document.getElementById('waiting-data');
+            if (ov) {
+                ov.style.display = 'flex';
+                const textElem = ov.querySelector('.waiting-text');
+                if (textElem) textElem.innerText = "AGUARDANDO DADOS...";
+            }
+        } else {
+            // REMOVE OVERLAY AO DESLIGAR
+            const ov = document.getElementById('waiting-data');
+            if (ov) ov.style.display = 'none';
+        }
+
         if (socket && socket.readyState === WebSocket.OPEN) {
             socket.send(JSON.stringify({ 
                 type: 'TOGGLE_MOTOR', 
@@ -1260,11 +1413,45 @@ document.addEventListener('click', (e) => {
     const snapBtn = e.target.closest('#snap-back');
     if (snapBtn) {
         horizontalScroll = 0;
+        isAutoScale = true; // REATIVA O AUTO-AJUSTE VERTICAL
         needsAutoScale = true;
         needsHistoryRedraw = true;
         draw();
     }
 });
+
+// 8. CONTROLES DE ZOOM E PAN (v8.6)
+function handleZoom(delta, mouseX) {
+    const oldVisible = visibleCandles;
+    const zoomSpeed = 0.9; // Ajuste de sensibilidade
+    
+    // 1. Calcula a largura do candle ANTES do zoom
+    const cwBefore = (canvas.width - rightMargin) / visibleCandles;
+    
+    // 2. Localiza o mouse ou usa o centro
+    const mX = (mouseX !== undefined) ? mouseX : (canvas.width / 2);
+    
+    // 3. Calcula quantos candles existem entre o mouse e a borda direita ANTES do zoom
+    const distToRight = canvas.width - rightMargin - mX;
+    const candlesToRight = (distToRight - horizontalScroll) / cwBefore;
+
+    // 4. Aplica o Zoom (Inverte o delta: Zoom In diminui visibleCandles)
+    if (delta > 0) {
+        visibleCandles = Math.max(1, visibleCandles * zoomSpeed);
+    } else {
+        visibleCandles = Math.min(200, visibleCandles / zoomSpeed);
+    }
+
+    // 5. Se o zoom mudou, ajusta o scroll para manter o ponto fixo
+    if (oldVisible !== visibleCandles) {
+        const cwAfter = (canvas.width - rightMargin) / visibleCandles;
+        horizontalScroll = distToRight - (candlesToRight * cwAfter);
+        
+        needsAutoScale = true;
+        needsHistoryRedraw = true;
+        draw();
+    }
+}
 
 // LÓGICA DE DESLIGAMENTO (SAÍDA)
 const connStatus = document.getElementById('conn-status');
@@ -1308,6 +1495,10 @@ if (toolClear) {
         fetch('/api/trades/clear', { method: 'POST' })
             .then(() => {
                 console.log("✅ Banco de dados limpo com sucesso.");
+                // Avisa o motor Python para liberar a aba Historico
+                if (socket && socket.readyState === WebSocket.OPEN) {
+                    socket.send(JSON.stringify({ type: 'CLEAR_CHART' }));
+                }
                 alert("HISTÓRICO ZERADO! O terminal será recarregado.");
                 window.location.reload();
             })
@@ -1369,3 +1560,105 @@ loadSettingsFromServer().then(() => {
     resize();
     draw();
 });
+
+// 9. GESTÃO DE ATALHOS (v8.8.1 - SUPORTE A COMBINAÇÕES)
+function checkShortcut(event, shortcutStr) {
+    if (!shortcutStr) return false;
+    const parts = shortcutStr.split('+');
+    const triggerKey = parts.pop();
+    const needsCtrl = parts.includes('Ctrl');
+    const needsAlt = parts.includes('Alt');
+    const needsShift = parts.includes('Shift');
+
+    return event.code === triggerKey && 
+           event.ctrlKey === needsCtrl && 
+           event.altKey === needsAlt && 
+           event.shiftKey === needsShift;
+}
+
+window.addEventListener('keydown', (e) => {
+    if (isModalOpen() || document.activeElement.tagName === 'INPUT') return;
+
+    if (checkShortcut(e, shortcuts.hand)) {
+        e.preventDefault();
+        activeTool = (activeTool === 'hand') ? 'none' : 'hand';
+        updateToolUI();
+    } else if (checkShortcut(e, shortcuts.cross)) {
+        e.preventDefault();
+        activeTool = (activeTool === 'cross') ? 'none' : 'cross';
+        updateToolUI();
+    } else if (checkShortcut(e, shortcuts.zoomIn)) {
+        e.preventDefault();
+        handleZoom(1);
+        needsHistoryRedraw = true;
+        draw();
+    } else if (checkShortcut(e, shortcuts.zoomOut)) {
+        e.preventDefault();
+        handleZoom(-1);
+        needsHistoryRedraw = true;
+        draw();
+    } else if (checkShortcut(e, shortcuts.reset)) {
+        e.preventDefault();
+        const btn = document.getElementById('tool-clear');
+        if (btn) btn.click();
+    } else if (checkShortcut(e, shortcuts.motor)) {
+        e.preventDefault();
+        const btn = document.getElementById('motor-toggle');
+        if (btn) btn.click();
+    } else if (checkShortcut(e, shortcuts.shutdown)) {
+        e.preventDefault();
+        if (confirm("Deseja realmente DESLIGAR o terminal?")) {
+            if (socket && socket.readyState === WebSocket.OPEN) {
+                socket.send(JSON.stringify({ type: 'SHUTDOWN' }));
+            }
+        }
+    }
+});
+
+function initShortcutRecording() {
+    const inputs = document.querySelectorAll('.shortcut-input');
+    inputs.forEach(input => {
+        const keyId = input.id.replace('shortcut-', '');
+        const currentCombo = shortcuts[keyId === 'hand' ? 'hand' : 
+                                       keyId === 'cross' ? 'cross' : 
+                                       keyId === 'zoom-in' ? 'zoomIn' : 
+                                       keyId === 'zoom-out' ? 'zoomOut' : 
+                                       keyId === 'motor' ? 'motor' :
+                                       keyId === 'shutdown' ? 'shutdown' : 'reset'];
+        
+        input.value = currentCombo ? currentCombo.replace(/Key|Digit/g, '').replace('Equal', '+').replace('Minus', '-') : "---";
+
+        input.onclick = () => {
+            if (input.classList.contains('recording')) return;
+            input.classList.add('recording');
+            input.value = "Pressione a combinação...";
+            
+            const captureKey = (e) => {
+                // Não grava se for APENAS uma tecla modificadora sozinha
+                if (['Control', 'Alt', 'Shift', 'Meta'].includes(e.key)) return;
+                
+                e.preventDefault();
+                e.stopPropagation();
+                
+                let combo = "";
+                if (e.ctrlKey) combo += "Ctrl+";
+                if (e.altKey) combo += "Alt+";
+                if (e.shiftKey) combo += "Shift+";
+                combo += e.code;
+                
+                const tool = input.id.replace('shortcut-', '');
+                const settingsKey = tool === 'hand' ? 'hand' : tool === 'cross' ? 'cross' : 
+                                    tool === 'zoom-in' ? 'zoomIn' : tool === 'zoom-out' ? 'zoomOut' : 
+                                    tool === 'motor' ? 'motor' : tool === 'shutdown' ? 'shutdown' : 'reset';
+                
+                shortcuts[settingsKey] = combo;
+                input.value = combo.replace(/Key|Digit/g, '').replace('Equal', '+').replace('Minus', '-');
+                
+                localStorage.setItem('zenith_shortcuts', JSON.stringify(shortcuts));
+                input.classList.remove('recording');
+                window.removeEventListener('keydown', captureKey, true);
+            };
+            window.addEventListener('keydown', captureKey, true);
+        };
+    });
+}

@@ -89,7 +89,12 @@ app.get('/api/identidade', (req, res) => res.send("VERSAO_7.1_AUDITADA"));
 app.post('/api/trades', async (req, res) => {
     const payload = req.body;
     if (payload.type === 'NEW_DATA' && payload.data) {
-        await db.insertTrades(payload.data);
+        try {
+            console.log(`[DB]: Tentando salvar ${payload.data.length} trades no Supabase...`);
+            await db.insertTrades(payload.data);
+        } catch (err) {
+            console.error("[DB ERROR]: Falha ao salvar no banco:", err.message);
+        }
     }
     broadcast(payload);
     res.sendStatus(200);

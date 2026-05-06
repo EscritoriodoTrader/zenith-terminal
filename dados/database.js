@@ -2,6 +2,10 @@ require('dotenv').config();
 const { Pool } = require('pg');
 
 // Configuração do Pool de Conexão com o PostgreSQL (Supabase)
+if (!process.env.DATABASE_URL) {
+    console.error("❌ ERRO CRÍTICO: DATABASE_URL não encontrada no arquivo .env!");
+}
+
 const pool = new Pool({
     connectionString: process.env.DATABASE_URL,
     ssl: {

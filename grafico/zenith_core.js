@@ -1,6 +1,6 @@
 /**
- * ZENITH TERMINAL - V7.2
- * CORREÇÃO MATEMÁTICA DE ORDENAÇÃO DE HISTÓRICO (F5 FIX)
+ * ZENITH TERMINAL - V7.3
+ * ESTABILIDADE DE DADOS HISTÓRICOS E CONVERSÃO NUMÉRICA
  */
 
 // 1. CONFIGURAÇÃO E ELEMENTOS
@@ -1149,7 +1149,10 @@ function processTrades(trades) {
             processedTradeIds.delete(removed.id);
         }
 
-        const candleTime = Math.floor(Number(t.timestamp) / tfMs) * tfMs;
+        const ts = Number(t.timestamp);
+        if (isNaN(ts)) return;
+
+        const candleTime = Math.floor(ts / tfMs) * tfMs;
         let candle = chartDataMap.get(candleTime);
 
         if (!candle) {

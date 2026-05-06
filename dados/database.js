@@ -94,11 +94,11 @@ async function insertTrades(trades) {
 
 /**
  * Recupera os trades ordenados por tempo
- * Limitamos aos últimos 20.000 para não sobrecarregar o gráfico no carregamento inicial
+ * Limitamos aos últimos 50.000 para não sobrecarregar o gráfico no carregamento inicial
  */
 async function getTrades() {
     try {
-        const res = await pool.query("SELECT * FROM trades ORDER BY timestamp ASC");
+        const res = await pool.query("SELECT * FROM trades ORDER BY timestamp DESC LIMIT 50000");
         return res.rows;
     } catch (err) {
         console.error("[DB ERROR]: Erro ao buscar trades:", err);

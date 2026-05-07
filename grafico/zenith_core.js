@@ -1160,21 +1160,25 @@ function connectMotor() {
             if (msg.type === 'END_HISTORY') {
                 isMountingHistory = false;
                 setTimeout(() => {
-                    reaggregateChart();
-                    
-                    if (!hasRealData && chartData.length > 0) {
-                        hasRealData = true;
-                        const lastC = chartData[0];
-                        externalLastPrice = lastC.close;
-                        autoScale();
-                    }
-                    
-                    const ov = document.getElementById('waiting-data');
-                    if (ov) ov.style.display = 'none';
+                    try {
+                        reaggregateChart();
+                        
+                        if (!hasRealData && chartData.length > 0) {
+                            hasRealData = true;
+                            const lastC = chartData[0];
+                            externalLastPrice = lastC.close;
+                            autoScale();
+                        }
+                    } catch (e) {
+                        console.error("Erro fatal ao reagrupar histórico:", e);
+                    } finally {
+                        const ov = document.getElementById('waiting-data');
+                        if (ov) ov.style.display = 'none';
 
-                    historyCanvasCache.width = historyCanvasCache.width; 
-                    needsHistoryRedraw = true;
-                    draw();
+                        historyCanvasCache.width = historyCanvasCache.width; 
+                        needsHistoryRedraw = true;
+                        draw();
+                    }
                 }, 500); 
             }
 

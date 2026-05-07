@@ -56,6 +56,7 @@ let tempSettings = {};
 let verticalZoom = 24; // Altura fixa de cada tick (0.25) em pixels
 let motorStatus = getStorage('zenith_motor', 'off');
 let socket;
+let isMountingHistory = false;
 
 
 
@@ -1145,6 +1146,7 @@ function connectMotor() {
             }
 
             if (msg.type === 'START_HISTORY') {
+                isMountingHistory = true;
                 const ov = document.getElementById('waiting-data');
                 if (ov) {
                     ov.style.display = 'flex';
@@ -1156,6 +1158,7 @@ function connectMotor() {
             }
 
             if (msg.type === 'END_HISTORY') {
+                isMountingHistory = false;
                 setTimeout(() => {
                     reaggregateChart();
                     
@@ -1189,7 +1192,13 @@ function connectMotor() {
 
             if (msg.type === 'NEW_TRADES' || msg.type === 'NEW_TRADE' || msg.type === 'NEW_DATA') {
                 const list = msg.trades || msg.data || (msg.id ? [msg] : null);
-                if (list && list.length > 0) processTrades(list);
+                if (list && list.length > 0) {
+                    if (isMountingHistory) {
+                        rawTrades.push(...list);
+                    } else {
+                        processTrades(list);
+                    }
+                }
             }
 
             if (msg.type === 'CLEAR_CHART') {

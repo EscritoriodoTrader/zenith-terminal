@@ -1181,10 +1181,10 @@ function connectMotor() {
                     // Se for um bloco único do servidor, faz o processo completo
                     processTrades(list);
                     reaggregateChart();
-                    const ov = document.getElementById('waiting-data');
-                    if (ov) ov.style.display = 'none';
                     draw();
                 }
+                const ov = document.getElementById('waiting-data');
+                if (ov) ov.style.display = 'none';
             }
 
             if (msg.type === 'NEW_TRADES' || msg.type === 'NEW_TRADE' || msg.type === 'NEW_DATA') {

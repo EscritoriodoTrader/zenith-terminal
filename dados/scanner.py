@@ -111,8 +111,8 @@ class DirectRTDClient:
             pass
             
     def refresh(self):
-        import ctypes
-        ctypes.windll.user32.MsgWaitForMultipleObjects(0, 0, 0, 10, 255)
+        import pythoncom
+        pythoncom.PumpWaitingMessages()
         
         if self.callback.has_updates:
             self.callback.has_updates = False

@@ -43,6 +43,11 @@ function startPythonScanner() {
         console.log("[SISTEMA]: Motor Python encerrado.");
         scannerProcess = null;
         broadcast({ type: 'PYTHON_DISCONNECT' });
+        
+        // Se o Python for encerrado (seja por erro ou por comando SHUTDOWN remoto),
+        // o Node local também deve se encerrar para não ficar rodando como processo fantasma.
+        console.log("[SISTEMA]: Encerrando o servidor Node local para acompanhar o Python...");
+        process.exit(0);
     });
 }
 

@@ -86,6 +86,9 @@ class DirectRTDClient:
             def Disconnect(self): pass
             
         self.callback = RTDCallback(self)
+        # HeartbeatInterval positivo faz o servidor RTD enviar dados periodicamente
+        # mesmo que nao haja mudancas (resolve o problema do valor inicial)
+        self.callback._HeartbeatInterval = 1000  # 1 segundo
         self.rtd.ServerStart(self.callback)
         print("[RTD DIRETO]: Conexão estabelecida! Assinando canais...")
         
@@ -107,6 +110,37 @@ class DirectRTDClient:
             self._subscribe(tid, ("T&T1", "AGR", str(i)), f"SELL_AGR_{i}"); tid+=1
             
         print(f"[RTD DIRETO]: {tid} canais assinados (500 traders por T&T). Zero dependencia de Excel!")
+        
+        # Forca uma primeira leitura imediata para pegar os valores iniciais
+        # sem depender do callback UpdateNotify
+        time.sleep(0.5)  # Aguarda o servidor processar todas as assinaturas
+        self._force_refresh()
+
+    def _force_refresh(self):
+        """Le todos os dados disponiveis agora, sem esperar o UpdateNotify"""
+        try:
+            import pythoncom
+            pythoncom.PumpWaitingMessages()
+            result = self.rtd.RefreshData(0)
+            if result and len(result) >= 2:
+                safearray = result[1]
+                if safearray and len(safearray) == 2:
+                    topic_ids = safearray[0]
+                    values = safearray[1]
+                    for i in range(len(topic_ids)):
+                        tid = topic_ids[i]
+                        val = values[i]
+                        if tid in self.topics:
+                            self.data_cache[self.topics[tid]] = val
+            # Verifica se ja temos nome do ativo nos dados iniciais
+            raw_name = self.data_cache.get("ASSET_NAME", "")
+            if raw_name and str(raw_name).strip() not in ("", "---", "None"):
+                new_name = str(raw_name).strip()
+                print(f"[RTD DIRETO]: Nome do ativo detectado na leitura inicial: {new_name}")
+                self._subscribe_info(new_name)
+                self.last_known_asset = new_name
+        except Exception as e:
+            print(f"[RTD DIRETO]: Aviso na leitura inicial: {e}")
 
     def _subscribe_info(self, symbol):
         """Assina os canais informativos (max, min, abertura, ultimo, vwap, var) de forma dinamica"""

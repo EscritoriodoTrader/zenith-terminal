@@ -87,8 +87,10 @@ class DirectRTDClient:
         print("[RTD DIRETO]: Conexão estabelecida! Assinando canais...")
         
         self._subscribe(1, ("T&T0", "INFO", "ATV"), "ASSET_NAME")
+        self._subscribe(2, ("T&T0", "INFO", "TAB"), "ORDER_INFO")
         
-        self.max_tt_lines = 100
+        # T&T tem 500 traders de cada lado (0 a 499)
+        self.max_tt_lines = 500
         tid = 10
         for i in range(self.max_tt_lines):
             self._subscribe(tid, ("T&T0", "DAT", str(i)), f"BUY_DAT_{i}"); tid+=1
@@ -101,7 +103,7 @@ class DirectRTDClient:
             self._subscribe(tid, ("T&T1", "QUL", str(i)), f"SELL_QUL_{i}"); tid+=1
             self._subscribe(tid, ("T&T1", "AGR", str(i)), f"SELL_AGR_{i}"); tid+=1
             
-        print(f"[RTD DIRETO]: {tid} canais assinados com sucesso. Zero dependencia de Excel!")
+        print(f"[RTD DIRETO]: {tid} canais assinados (500 traders por T&T). Zero dependencia de Excel!")
         
     def _subscribe(self, topic_id, args, internal_name):
         try:

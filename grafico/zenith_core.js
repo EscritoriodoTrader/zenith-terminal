@@ -1538,6 +1538,24 @@ document.addEventListener('click', (e) => {
         needsHistoryRedraw = true;
         draw();
     }
+
+    // BOTÃO MONTAR HISTÓRICO
+    const histBtn = e.target.closest('#tool-history');
+    if (histBtn) {
+        if (!socket || socket.readyState !== WebSocket.OPEN) {
+            alert('Motor desconectado. Ligue o motor primeiro antes de montar o histórico.');
+            return;
+        }
+        // Mostra a cortina "Montando Gráfico"
+        const ov = document.getElementById('waiting-data');
+        if (ov) {
+            const textElem = ov.querySelector('.waiting-text');
+            if (textElem) textElem.innerText = 'MONTANDO GRÁFICO...';
+            ov.style.display = 'flex';
+        }
+        // Envia o comando para o Python reler o arquivo Historico
+        socket.send(JSON.stringify({ type: 'RELOAD_HISTORY' }));
+    }
 });
 
 // 8. CONTROLES DE ZOOM E PAN (v8.6)

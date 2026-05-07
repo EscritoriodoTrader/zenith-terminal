@@ -106,6 +106,10 @@ wss.on('connection', async (ws, req) => {
             } else if (cmd.type === 'GET_LAST_TS') {
                 const lastTs = await db.getLastTimestamp();
                 ws.send(JSON.stringify({ type: 'LAST_TS', data: lastTs }));
+            } else if (cmd.type === 'RELOAD_HISTORY') {
+                // Botao "Montar Historico": avisa o Python para reler o arquivo Historico
+                console.log("[WS]: Comando RELOAD_HISTORY recebido. Encaminhando para o Python...");
+                broadcast({ type: 'RELOAD_HISTORY' });
             } else if (cmd.type === 'NEW_DATA' && cmd.data) {
                 db.insertTrades(cmd.data).catch(() => {});
                 broadcast(cmd);

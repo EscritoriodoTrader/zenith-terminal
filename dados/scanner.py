@@ -257,6 +257,12 @@ def on_message(ws, message):
             last_historical_ts = 0
             sent_trades_buffer.clear()
             print("[SISTEMA]: Comando de RESET recebido. Memória de IDs limpa e aba 'Historico' liberada.")
+        elif t == 'RELOAD_HISTORY':
+            # Botao "Montar Historico" pressionado no grafico
+            history_already_read = False
+            last_ts_received = True  # Nao precisa esperar o banco, ja sabemos o estado
+            sent_trades_buffer.clear()
+            print("[SISTEMA]: Comando RELOAD_HISTORY recebido. Relendo arquivo Historico...")
         elif t == 'SHUTDOWN':
             print("[SISTEMA]: Encerrando motor por comando remoto...")
             import os

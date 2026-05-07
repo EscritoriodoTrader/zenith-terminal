@@ -67,6 +67,12 @@ wss.on('connection', async (ws, req) => {
     ws.on('message', async (message) => {
         try {
             const cmd = JSON.parse(message);
+            
+            // Marca este WebSocket como sendo o do Python se ele se identificar
+            if (cmd.origin === 'PYTHON_MOTOR' || cmd.type === 'PYTHON_CONNECT') {
+                ws.isPython = true;
+            }
+
             if (cmd.type === 'SHUTDOWN') {
                 console.log("[WS]: Comando de desligamento recebido. Encerrando sistemas...");
                 
@@ -99,6 +105,13 @@ wss.on('connection', async (ws, req) => {
                 broadcast(cmd);
             }
         } catch (e) {}
+    });
+
+    ws.on('close', () => {
+        if (ws.isPython || type === 'MOTOR PYTHON') {
+            console.log("[WS]: Conexão Web-Socket com o Motor Python foi fechada!");
+            broadcast({ type: 'PYTHON_DISCONNECT' });
+        }
     });
 });
 

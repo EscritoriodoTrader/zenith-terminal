@@ -1431,37 +1431,31 @@ function updateMotorUI() {
 document.addEventListener('click', (e) => {
     const btn = e.target.closest('#motor-toggle');
     if (btn) {
-        if (motorStatus === 'on') {
-            showCustomConfirm("Deseja encerrar todo o sistema Zenith?", () => {
-                motorStatus = 'off';
-                updateMotorUI();
-                setStorage('zenith_motor', motorStatus);
-                
-                const ov = document.getElementById('waiting-data');
-                if (ov) ov.style.display = 'none';
+        const newStatus = (motorStatus === 'on') ? 'off' : 'on';
 
-                if (socket && socket.readyState === WebSocket.OPEN) {
-                    socket.send(JSON.stringify({ type: 'TOGGLE_MOTOR', running: false }));
-                    socket.send(JSON.stringify({ type: 'SHUTDOWN' }));
-                }
-            });
-        } else {
-            motorStatus = 'on';
-            updateMotorUI();
-            setStorage('zenith_motor', motorStatus);
+        motorStatus = newStatus;
+        updateMotorUI();
+        setStorage('zenith_motor', motorStatus);
 
+        if (newStatus === 'on') {
             const ov = document.getElementById('waiting-data');
             if (ov) {
                 ov.style.display = 'flex';
                 const textElem = ov.querySelector('.waiting-text');
                 if (textElem) textElem.innerText = "AGUARDANDO DADOS...";
             }
+        } else {
+            const ov = document.getElementById('waiting-data');
+            if (ov) ov.style.display = 'none';
+        }
 
-            if (socket && socket.readyState === WebSocket.OPEN) {
-                socket.send(JSON.stringify({ type: 'TOGGLE_MOTOR', running: true }));
-            } else {
-                connectMotor();
-            }
+        if (socket && socket.readyState === WebSocket.OPEN) {
+            socket.send(JSON.stringify({ 
+                type: 'TOGGLE_MOTOR', 
+                running: (motorStatus === 'on') 
+            }));
+        } else if (newStatus === 'on') {
+            connectMotor();
         }
     }
 
@@ -1515,19 +1509,21 @@ const shutdownOverlay = document.getElementById('shutdown-overlay');
 
 if (connStatus) {
     connStatus.onclick = () => {
-        if (!confirm("Deseja encerrar todo o sistema Zenith?")) return;
-        
-        // 1. Mostra o Overlay IMEDIATAMENTE
-        shutdownOverlay.classList.add('active');
-        const h2 = shutdownOverlay.querySelector('h2');
-        const p = shutdownOverlay.querySelector('p');
-        if (h2) h2.innerText = "SISTEMA ENCERRADO";
-        if (p) p.innerText = "Todos os processos foram finalizados com sucesso.";
+        showCustomConfirm("Deseja encerrar todo o sistema Zenith?", () => {
+            // 1. Mostra o Overlay IMEDIATAMENTE
+            if (shutdownOverlay) {
+                shutdownOverlay.classList.add('active');
+                const h2 = shutdownOverlay.querySelector('h2');
+                const p = shutdownOverlay.querySelector('p');
+                if (h2) h2.innerText = "SISTEMA ENCERRADO";
+                if (p) p.innerText = "Todos os processos foram finalizados com sucesso.";
+            }
 
-        // 2. Envia o comando para o servidor morrer
-        if (socket && socket.readyState === WebSocket.OPEN) {
-            socket.send(JSON.stringify({ type: 'SHUTDOWN' }));
-        }
+            // 2. Envia o comando para o servidor morrer
+            if (socket && socket.readyState === WebSocket.OPEN) {
+                socket.send(JSON.stringify({ type: 'SHUTDOWN' }));
+            }
+        });
     };
 }
 

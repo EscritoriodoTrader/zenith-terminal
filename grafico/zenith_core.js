@@ -100,7 +100,7 @@ function isModalOpen() {
 // 2.1 PERSISTÊNCIA NO SERVIDOR (Sincronização com o Sistema)
 async function loadSettingsFromServer() {
     try {
-        const resp = await fetch('/api/settings');
+        const resp = await fetch('/api/settings?t=' + Date.now(), { cache: 'no-store' });
         const cfg = await resp.json();
         if (Object.keys(cfg).length > 0) {
             if (cfg.chartBgColor) { chartBgColor = cfg.chartBgColor; setStorage('zenith_bg_color', chartBgColor); }

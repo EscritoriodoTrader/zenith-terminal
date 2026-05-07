@@ -74,9 +74,10 @@ def start_ws():
             global ws_client
             ws_client = ws
             print(f"[WS]: Túnel de dados CONECTADO em {ws_url}")
-            # Manda um "Oi" para o gráfico só para testar o canal
+            # Manda um "Oi" para o gráfico só para testar o canal e avisar que o Python está online
             try:
                 ws.send(json.dumps({"type": "PING", "origin": "PYTHON_MOTOR"}))
+                ws.send(json.dumps({"type": "PYTHON_CONNECT"}))
             except: pass
 
         while True:
@@ -127,14 +128,15 @@ def tx_worker():
                 except:
                     consecutive_failures += 1
             
-            # SE FALHAR TUDO POR MUITO TEMPO, AUTO-DESLIGA
-            if consecutive_failures > 5:
-                print("\n[AUTO-STOP]: Conexão perdida com o terminal. Encerrando motor...")
-                import os
-                os._exit(0)
+            # SE FALHAR TUDO POR MUITO TEMPO, AVISA E TENTA RECONECTAR
+            if consecutive_failures > 50:
+                print("\n[ALERTA]: Conexão perdida com o terminal. Tentando reconectar em vez de encerrar...")
+                time.sleep(2)
+                consecutive_failures = 0
                 
             tx_queue.task_done()
         except Exception as e:
+            consecutive_failures += 1
             time.sleep(1)
 
 def clear_database():

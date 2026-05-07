@@ -42,6 +42,7 @@ function startPythonScanner() {
     scannerProcess.on('exit', () => {
         console.log("[SISTEMA]: Motor Python encerrado.");
         scannerProcess = null;
+        broadcast({ type: 'PYTHON_DISCONNECT' });
     });
 }
 

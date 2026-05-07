@@ -1196,6 +1196,27 @@ function connectMotor() {
                 chartData = []; chartDataMap.clear(); processedTradeIds.clear(); rawTrades = [];
                 needsHistoryRedraw = true; draw();
             }
+
+            if (msg.type === 'PYTHON_DISCONNECT') {
+                console.warn("[WS]: ALERTA - Conexão com o Motor Python perdida!");
+                const ov = document.getElementById('waiting-data');
+                if (ov) {
+                    ov.style.display = 'flex';
+                    const textElem = ov.querySelector('.waiting-text');
+                    if (textElem) textElem.innerText = "MOTOR PYTHON DESCONECTADO... Aguardando reconexão.";
+                }
+            }
+
+            if (msg.type === 'PYTHON_CONNECT') {
+                console.log("[WS]: Motor Python conectado e pronto!");
+                const ov = document.getElementById('waiting-data');
+                if (ov) {
+                    const textElem = ov.querySelector('.waiting-text');
+                    if (textElem && textElem.innerText.includes("PYTHON DESCONECTADO")) {
+                        ov.style.display = 'none';
+                    }
+                }
+            }
         } catch (err) { console.error("Erro no processamento:", err); }
     };
 

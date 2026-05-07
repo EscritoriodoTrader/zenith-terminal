@@ -1361,13 +1361,29 @@ function processTrades(trades) {
                 const diff = currentPrice - candle.open;
 
                 if (Math.abs(diff) >= pointLimit) {
-                    const direction = diff > 0 ? 1 : -1;
-                    candle.close = candle.open + (direction * pointLimit);
-                    
-                    if (direction > 0) candle.high = Math.max(candle.high, candle.close);
-                    else candle.low = Math.min(candle.low, candle.close);
+                    // O trade atual atinge/rompe o limite!
+                    // Ele deve pertencer ao candle ANTIGO para que a extremidade não fique sem volume.
+                    candle.close = currentPrice;
+                    if (currentPrice > candle.high) candle.high = currentPrice;
+                    if (currentPrice < candle.low) candle.low = currentPrice;
 
-                    const nextOpen = candle.close;
+                    const pS = currentPrice.toFixed(2);
+                    if (!candle.ticks[pS]) candle.ticks[pS] = { buy: 0, sell: 0, p: currentPrice };
+                    if (t.side.toUpperCase() === 'BUY') candle.ticks[pS].buy += t.quantity;
+                    else candle.ticks[pS].sell += t.quantity;
+
+                    const totalV = candle.ticks[pS].buy + candle.ticks[pS].sell;
+                    if (totalV > (candle.maxV || 0)) candle.maxV = totalV;
+
+                    // Fecha o candle atual no limite exato
+                    const direction = diff > 0 ? 1 : -1;
+                    const exactClose = candle.open + (direction * pointLimit);
+                    candle.close = exactClose;
+                    if (direction > 0) candle.high = Math.max(candle.high, exactClose);
+                    else candle.low = Math.min(candle.low, exactClose);
+
+                    // Cria o próximo candle
+                    const nextOpen = exactClose;
                     candle = {
                         timestamp: new Date(ts),
                         open: nextOpen, high: nextOpen, low: nextOpen, close: nextOpen,
@@ -1375,6 +1391,9 @@ function processTrades(trades) {
                     };
                     chartData.unshift(candle); // NOVO CANDLE NO TOPO
                     addedNewCandle = true;
+                    
+                    // O trade já foi processado no candle antigo
+                    finishedProcessingTrade = true;
                 } else {
                     candle.close = currentPrice;
                     if (currentPrice > candle.high) candle.high = currentPrice;

@@ -314,13 +314,15 @@ def read_excel_history(sent_buffer):
                 except: pass
                 
             try:
-                for i in range(0, len(hist_trades), 1000):
-                    batch = hist_trades[i:i+1000]
-                    try: ws_client.send(json.dumps({"type": "NEW_DATA", "asset": "HISTORICO", "data": batch}))
+                for i in range(0, len(hist_trades), 2000):
+                    batch = hist_trades[i:i+2000]
+                    payload = {"type": "NEW_DATA", "asset": "HISTORICO", "data": batch}
+                    try:
+                        session.post(POST_URL, json=payload, timeout=10)
                     except: pass
-                    if (i // 1000) % 20 == 0 and i > 0:
+                    
+                    if i > 0 and (i // 2000) % 5 == 0:
                         print(f"[SISTEMA]: Enviando histórico para a nuvem... {i} trades enviados.")
-                    time.sleep(0.05) # Pausa vital para não engasgar o buffer do WebSocket e da Nuvem
             finally:
                 if is_full_sync:
                     try: ws_client.send(json.dumps({"type": "END_HISTORY"}))

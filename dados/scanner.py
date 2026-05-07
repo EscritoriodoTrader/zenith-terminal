@@ -268,59 +268,71 @@ def normalize_side(val):
     if s.startswith('C') or s.startswith('B'): return "BUY"
     return "BUY"
 
-def read_excel_history(sent_buffer):
+def read_text_history(sent_buffer):
     """
-    Lê a aba 'Historico' do Excel (Colunas A, C, D, F)
-    Mapping: A=Horário, C=Preço, D=Quantidade, F=Agressor
+    Lê o arquivo 'Historico' (texto/TSV)
+    Mapping: 0=Horário, 2=Preço, 3=Quantidade, 5=Agressor
     """
     global history_already_read, last_history_uid
     
     try:
-        sheet_hist = get_sheet("Historico")
-        if not sheet_hist: return
-            
-        print("[SISTEMA]: Sincronizando aba 'Historico' com Precisão BlackArrow...")
+        import os
         
-        # Se o servidor não tinha nada, é um full sync e o gráfico precisa do sinal
+        file_path = None
+        base_dir = os.path.dirname(os.path.abspath(__file__))
+        parent_dir = os.path.dirname(base_dir) # FOOTPRINT folder
+        
+        for name in ['Historico', 'Historico.txt', 'Historico.csv', 'candle.pontos']:
+            p = os.path.join(parent_dir, name)
+            if os.path.exists(p):
+                file_path = p
+                break
+                
+        if not file_path:
+            print("[SISTEMA]: Arquivo 'Historico' não encontrado. Pressione F5 no terminal se estiver usando apenas tempo real.")
+            history_already_read = True
+            return
+            
+        print(f"[SISTEMA]: Lendo Histórico ultrarrápido do arquivo: {os.path.basename(file_path)}")
+        
         is_full_sync = (last_historical_ts == 0)
         
-        last_row = sheet_hist.range("A" + str(sheet_hist.cells.last_cell.row)).end('up').row
-        if last_row < 2: return
+        with open(file_path, 'r', encoding='utf-8', errors='ignore') as f:
+            lines = f.readlines()
+            
+        start_idx = 0
+        for i, line in enumerate(lines[:10]):
+            if line.strip() and line[0].isdigit():
+                start_idx = i
+                break
+                
+        data = []
+        for line in lines[start_idx:]:
+            if not line.strip(): continue
+            parts = line.strip().split('\t')
+            if len(parts) >= 6:
+                data.append(parts)
         
-        data = sheet_hist.range(f"A2:F{last_row}").value
-        if not isinstance(data[0], list): data = [data]
+        if not data: return
         
         hist_trades = []
         temp_last_uid = None
         now = datetime.datetime.now()
-        
-        # Contador para trades no mesmo milissegundo
         ts_counters = {}
         
         for row in data:
-            # REGRA DE PARADA: Se os 4 campos vitais estiverem vazios, o histórico acabou.
-            if not row[0] and not row[2] and not row[3] and not row[5]:
-                break
-                
-            # Se a linha for parcialmente inválida, pula para a próxima mas não para o processo
-            if not row[0] or row[2] is None or row[3] is None:
-                continue
+            if not row[0] and not row[2] and not row[3] and not row[5]: break
+            if not row[0] or not row[2] or not row[3]: continue
                 
             ts, time_str = process_time(row[0], now)
+            if not ts: continue
             
-            if ts <= last_historical_ts:
-                continue
+            if ts <= last_historical_ts: continue
                 
             p = clean_price(row[2])
             q = int(float(str(row[3]).replace(',', '.')))
             side = normalize_side(row[5])
             
-            if len(hist_trades) < 5:
-                print(f"[DEBUG]: Lendo linha {len(hist_trades)+2} | Agressor Original: '{row[5]}' -> Traduzido para: {side}")
-            elif len(hist_trades) % 5000 == 0:
-                print(f"[SISTEMA]: Lendo histórico... já processados {len(hist_trades)} trades.")
-            
-            # Gera ID Único com Sequência para não perder trades idênticos
             base_id = f"{side}_{ts}_{p}_{q}"
             ts_counters[base_id] = ts_counters.get(base_id, 0) + 1
             uid = f"{base_id}_seq{ts_counters[base_id]}"
@@ -329,7 +341,7 @@ def read_excel_history(sent_buffer):
                 hist_trades.append({"id": uid, "timestamp": ts, "price": p, "quantity": q, "side": side})
                 sent_buffer.add(uid)
                 temp_last_uid = uid
-        
+                
         if hist_trades:
             if is_full_sync:
                 try: ws_client.send(json.dumps({"type": "START_HISTORY", "count": len(hist_trades)}))
@@ -358,47 +370,11 @@ def read_excel_history(sent_buffer):
                     except: pass
                 
             last_history_uid = temp_last_uid
-            print(f"[SISTEMA]: Sincronização concluída. {len(hist_trades)} trades enviados para a nuvem.")
+            print(f"[SISTEMA]: Sincronização concluída. {len(hist_trades)} trades lidos do arquivo em milissegundos!")
         
         history_already_read = True
     except Exception as e:
-        print(f"[ERRO HISTORICO]: {e}")
-
-def read_historical_data(sent_buffer):
-    """Lê a aba Histórico para carregar o passado"""
-    global last_historical_ts
-    sheet_h = get_sheet("Historico")
-    if not sheet_h: return
-    
-    last_row = sheet_h.range("A" + str(sheet_h.cells.last_cell.row)).end('up').row
-    if last_row < 2: return
-
-    print(f"[HISTORICO]: Lendo {last_row - 1} trades passados...")
-    data = sheet_h.range(f"A2:F{last_row}").value # A=Hora, C=Preço, D=Qtd, F=Agressor
-    if not isinstance(data[0], list): data = [data]
-
-    now = datetime.datetime.now()
-    hist_trades = []
-    for row in data:
-        if not row or len(row) < 6: continue
-        ts, time_str = process_time(row[0], now)
-        if ts:
-            try:
-                price = clean_price(row[2])
-                qty = int(row[3]) if row[3] else 0
-                side = "BUY" if "COMPR" in str(row[5]).upper() else "SELL"
-                
-                uid = f"HIST_{ts}_{price}_{qty}_{side}"
-                if uid not in sent_buffer:
-                    hist_trades.append({"id": uid, "timestamp": ts, "price": price, "quantity": qty, "side": side})
-                    sent_buffer.add(uid)
-                    if ts > last_historical_ts: last_historical_ts = ts
-            except: continue
-
-    if hist_trades:
-        hist_trades.sort(key=lambda x: x['timestamp'])
-        print(f"[HISTORICO]: Enviando {len(hist_trades)} trades históricos.")
-        tx_queue.put({"data": hist_trades, "lastPrice": hist_trades[-1]['price'], "variation": 0})
+        print(f"[ERRO HISTORICO TEXTO]: {e}")
 
 def main():
     global last_historical_ts, history_already_read, sent_trades_buffer, is_active
@@ -433,7 +409,7 @@ def main():
                 while not last_ts_received and time.time() - wait_start < 5:
                     time.sleep(0.1)
                     
-                read_excel_history(sent_trades_buffer)
+                read_text_history(sent_trades_buffer)
                 historical_loaded = True
 
             if not sheet_rtd:

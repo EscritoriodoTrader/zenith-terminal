@@ -562,8 +562,12 @@ def read_text_history(sent_buffer):
 def main():
     pythoncom.CoInitialize()
     global last_historical_ts, history_already_read, sent_trades_buffer, is_active
-    print("--- ZENITH SCANNER V7.0.0: MOTOR DIRETO (SEM EXCEL) ---")
+    print("--- ZENITH SCANNER V7.1.0: MOTOR DIRETO (SEM EXCEL) ---")
     threading.Thread(target=tx_worker, daemon=True).start()
+    
+    # Historico NAO e mais lido automaticamente ao ligar.
+    # Ele so e carregado quando o usuario aperta o botao 'Montar Historico' no grafico.
+    history_already_read = True
     
     rtd_client = None
     last_price_sent = 0
@@ -584,16 +588,6 @@ def main():
                     historical_loaded = False
                 time.sleep(1)
                 continue
-
-            if not history_already_read and is_active:
-                print(f"[{datetime.datetime.now().strftime('%H:%M:%S')}] Motor Ligado! Lendo histórico...")
-                
-                wait_start = time.time()
-                while not last_ts_received and time.time() - wait_start < 5:
-                    time.sleep(0.1)
-                    
-                read_text_history(sent_trades_buffer)
-                historical_loaded = True
 
             if not rtd_client:
                 try:

@@ -1174,8 +1174,8 @@ function connectMotor() {
                     const ov = document.getElementById('waiting-data');
                     if (ov) ov.style.display = 'none';
                 }
-                // Atualiza o Ativo e Variação vindo do Excel (A2 e H2)
-                if (msg.asset) {
+                // Atualiza o Ativo e Variação - apenas quando vem dado real (nao historico)
+                if (msg.asset && msg.asset !== 'HISTORICO' && msg.asset !== '---') {
                     const assetElem = document.querySelector('.asset-name');
                     if (assetElem) {
                         const tfLabel = currentTimeframe.toUpperCase().replace('MIN', 'M');
@@ -1199,7 +1199,8 @@ function connectMotor() {
                     }
                 }
 
-                if (msg.variation !== undefined) {
+                // Variação: só atualiza quando vem valor real do RTD informativo
+                if (msg.variation !== undefined && msg.asset !== 'HISTORICO') {
                     const varElem = document.getElementById('variation');
                     if (varElem) {
                         const v = msg.variation || 0;

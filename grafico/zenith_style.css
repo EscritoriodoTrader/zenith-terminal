@@ -934,7 +934,7 @@ body {
     left: 0;
     width: 100%;
     height: calc(100% - 40px);
-    background: rgba(19, 23, 34, 0.85);
+    background: rgba(28, 32, 39, 0.95);
     backdrop-filter: blur(8px);
     display: none;
     align-items: center;

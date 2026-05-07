@@ -113,6 +113,18 @@
                 <div class="waiting-text">AGUARDANDO DADOS...</div>
             </div>
         </div>
+        
+        <!-- MODAL DE CONFIRMAÇÃO PERSONALIZADO -->
+        <div id="custom-confirm-modal" class="search-overlay" style="display: none; z-index: 10000; align-items: center; justify-content: center;">
+            <div class="settings-box" style="width: 400px; height: auto; display: flex; flex-direction: column; background: rgba(28, 32, 39, 0.95); padding: 20px; border-radius: 8px;">
+                <h3 style="color: #fff; margin-top: 0; margin-bottom: 15px; font-weight: normal; font-size: 16px;">Confirmação</h3>
+                <p id="custom-confirm-text" style="color: #d1d4dc; font-size: 14px; margin-bottom: 25px; line-height: 1.5;"></p>
+                <div style="display: flex; justify-content: flex-end; gap: 10px;">
+                    <button id="custom-confirm-no" style="background: rgba(255, 255, 255, 0.1); color: #d1d4dc; border: none; padding: 8px 16px; border-radius: 4px; cursor: pointer;">Cancelar</button>
+                    <button id="custom-confirm-yes" style="background: #2962ff; color: #fff; border: none; padding: 8px 16px; border-radius: 4px; cursor: pointer;">Confirmar</button>
+                </div>
+            </div>
+        </div>
     </div>
 
     <!-- LUPA DE PESQUISA (PASSO 5 ORIGINAL RESTAURADO) -->

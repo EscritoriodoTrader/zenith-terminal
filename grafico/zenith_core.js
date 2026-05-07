@@ -26,6 +26,30 @@ function setStorage(key, val) {
     catch (e) { console.warn("Storage bloqueado por segurança do navegador (CORS/File)"); }
 }
 
+function showCustomConfirm(message, onConfirm) {
+    const modal = document.getElementById('custom-confirm-modal');
+    const textEl = document.getElementById('custom-confirm-text');
+    const btnYes = document.getElementById('custom-confirm-yes');
+    const btnNo = document.getElementById('custom-confirm-no');
+    
+    if (!modal || !textEl || !btnYes || !btnNo) {
+        if (confirm(message)) onConfirm();
+        return;
+    }
+    
+    textEl.innerText = message;
+    modal.style.display = 'flex';
+    
+    const cleanup = () => {
+        modal.style.display = 'none';
+        btnYes.onclick = null;
+        btnNo.onclick = null;
+    };
+    
+    btnYes.onclick = () => { cleanup(); onConfirm(); };
+    btnNo.onclick = () => { cleanup(); };
+}
+
 let chartBgColor = getStorage('zenith_bg_color', '#131722');
 let themeColor = getStorage('zenith_theme_color', '#1c2027');
 let scaleFontSize = parseInt(getStorage('zenith_font_size', '12'));
@@ -445,12 +469,6 @@ function draw() {
                 ctx.textAlign = "left";
                 ctx.textBaseline = "middle"; // Alinhamento vertical preciso
                 ctx.fillText(statusText, startX + iconSize + gap, iconY + 2);
-            } else {
-                statusText = "Aguardando Dados...";
-                ctx.fillStyle = statusColor;
-                ctx.font = "bold 24px Arial";
-                ctx.textAlign = "center";
-                ctx.fillText(statusText, centerX, centerY);
             }
 
             requestAnimationFrame(draw);
@@ -1413,33 +1431,37 @@ function updateMotorUI() {
 document.addEventListener('click', (e) => {
     const btn = e.target.closest('#motor-toggle');
     if (btn) {
-        const newStatus = (motorStatus === 'on') ? 'off' : 'on';
+        if (motorStatus === 'on') {
+            showCustomConfirm("Deseja encerrar todo o sistema Zenith?", () => {
+                motorStatus = 'off';
+                updateMotorUI();
+                setStorage('zenith_motor', motorStatus);
+                
+                const ov = document.getElementById('waiting-data');
+                if (ov) ov.style.display = 'none';
 
-        motorStatus = newStatus;
-        updateMotorUI();
-        setStorage('zenith_motor', motorStatus);
+                if (socket && socket.readyState === WebSocket.OPEN) {
+                    socket.send(JSON.stringify({ type: 'TOGGLE_MOTOR', running: false }));
+                    socket.send(JSON.stringify({ type: 'SHUTDOWN' }));
+                }
+            });
+        } else {
+            motorStatus = 'on';
+            updateMotorUI();
+            setStorage('zenith_motor', motorStatus);
 
-        if (newStatus === 'on') {
-            // FASE 1: AGUARDANDO DADOS (IMEDIATO NO CLIQUE)
             const ov = document.getElementById('waiting-data');
             if (ov) {
                 ov.style.display = 'flex';
                 const textElem = ov.querySelector('.waiting-text');
                 if (textElem) textElem.innerText = "AGUARDANDO DADOS...";
             }
-        } else {
-            // REMOVE OVERLAY AO DESLIGAR
-            const ov = document.getElementById('waiting-data');
-            if (ov) ov.style.display = 'none';
-        }
 
-        if (socket && socket.readyState === WebSocket.OPEN) {
-            socket.send(JSON.stringify({ 
-                type: 'TOGGLE_MOTOR', 
-                running: (motorStatus === 'on') 
-            }));
-        } else if (newStatus === 'on') {
-            connectMotor();
+            if (socket && socket.readyState === WebSocket.OPEN) {
+                socket.send(JSON.stringify({ type: 'TOGGLE_MOTOR', running: true }));
+            } else {
+                connectMotor();
+            }
         }
     }
 
@@ -1513,9 +1535,8 @@ if (connStatus) {
 const toolClear = document.getElementById('tool-clear');
 if (toolClear) {
     toolClear.onclick = () => {
-        if (!confirm("Deseja realmente LIMPAR os negócios? Isso vai zerar o histórico no navegador e no banco de dados, mas manterá suas cores e configurações.")) return;
-
-        console.log("🗑️ LIMPANDO NEGÓCIOS (RESET DE HISTÓRICO)...");
+        showCustomConfirm("Deseja realmente LIMPAR os negócios? Isso vai zerar o histórico no navegador e no banco de dados, mas manterá suas cores e configurações.", () => {
+            console.log("🗑️ LIMPANDO NEGÓCIOS (RESET DE HISTÓRICO)...");
         
         // MOSTRA A TELA DE CARREGAMENTO PARA O RESET
         const ov = document.getElementById('waiting-data');
@@ -1562,6 +1583,7 @@ if (toolClear) {
                     window.location.reload();
                 }, 1500);
             });
+        });
     };
 }
 

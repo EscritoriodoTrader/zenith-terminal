@@ -107,4 +107,17 @@ async function getTrades() {
     }
 }
 
-module.exports = { initDatabase, clearDatabase, insertTrades, getTrades };
+/**
+ * Busca o maior timestamp já salvo no banco para sincronização rápida do histórico
+ */
+async function getLastTimestamp() {
+    try {
+        const res = await pool.query("SELECT MAX(timestamp) as last_ts FROM trades");
+        return res.rows[0]?.last_ts || 0;
+    } catch (err) {
+        console.error("[DB ERROR]: Erro ao buscar último timestamp:", err);
+        return 0;
+    }
+}
+
+module.exports = { initDatabase, clearDatabase, insertTrades, getTrades, getLastTimestamp };

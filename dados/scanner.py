@@ -43,6 +43,7 @@ ws_client = None
 
 history_requested = False
 history_already_read = False
+last_ts_received = False
 sent_trades_buffer = set()
 
 def on_message(ws, message):
@@ -56,8 +57,18 @@ def on_message(ws, message):
             print(f"[COMANDO]: Motor {'LIGADO' if is_active else 'DESLIGADO'}")
         elif t == 'GET_HISTORY':
             pass 
+        elif t == 'LAST_TS':
+            global last_ts_received
+            last_historical_ts = msg.get('data', 0)
+            last_ts_received = True
+            if last_historical_ts > 0:
+                print(f"[SISTEMA]: O servidor já possui histórico até a data {(datetime.datetime.fromtimestamp(last_historical_ts/1000.0)).strftime('%d/%m %H:%M:%S')}")
+            else:
+                print("[SISTEMA]: O banco do servidor está limpo.")
         elif t == 'CLEAR_CHART':
             history_already_read = False
+            last_ts_received = False
+            last_historical_ts = 0
             sent_trades_buffer.clear()
             print("[SISTEMA]: Comando de RESET recebido. Memória de IDs limpa e aba 'Historico' liberada.")
         elif t == 'SHUTDOWN':
@@ -78,6 +89,7 @@ def start_ws():
             try:
                 ws.send(json.dumps({"type": "PING", "origin": "PYTHON_MOTOR"}))
                 ws.send(json.dumps({"type": "PYTHON_CONNECT"}))
+                ws.send(json.dumps({"type": "GET_LAST_TS"}))
             except: pass
 
         while True:
@@ -270,6 +282,10 @@ def read_excel_history(sent_buffer):
                 continue
                 
             ts, time_str = process_time(row[0], now)
+            
+            if ts <= last_historical_ts:
+                continue
+                
             p = clean_price(row[2])
             q = int(float(str(row[3]).replace(',', '.')))
             side = normalize_side(row[5])
@@ -290,20 +306,14 @@ def read_excel_history(sent_buffer):
                 temp_last_uid = uid
         
         if hist_trades:
-            # SINAL DE INÍCIO: O Gráfico coloca a cortina
-            ws_client.send(json.dumps({"type": "START_HISTORY", "count": len(hist_trades)}))
-            
             for i in range(0, len(hist_trades), 1000):
                 batch = hist_trades[i:i+1000]
                 ws_client.send(json.dumps({"type": "NEW_DATA", "asset": "HISTORICO", "data": batch}))
                 if (i // 1000) % 20 == 0 and i > 0:
                     print(f"[SISTEMA]: Enviando histórico para a nuvem... {i} trades enviados.")
             
-            # SINAL DE FIM: O Gráfico processa tudo e sobe a cortina
-            ws_client.send(json.dumps({"type": "END_HISTORY"}))
-            
             last_history_uid = temp_last_uid
-            print(f"[SISTEMA]: {len(hist_trades)} trades sincronizados.")
+            print(f"[SISTEMA]: Sincronização concluída. {len(hist_trades)} trades enviados para a nuvem.")
         
         history_already_read = True
     except Exception as e:
@@ -371,7 +381,13 @@ def main():
                 continue
 
             if not history_already_read and is_active:
-                print(f"[{datetime.datetime.now().strftime('%H:%M:%S')}] Motor Ligado! Carregando aba 'Historico'...")
+                print(f"[{datetime.datetime.now().strftime('%H:%M:%S')}] Motor Ligado! Verificando histórico na nuvem...")
+                
+                # Espera o servidor devolver qual foi o último trade salvo
+                wait_start = time.time()
+                while not last_ts_received and time.time() - wait_start < 5:
+                    time.sleep(0.1)
+                    
                 read_excel_history(sent_trades_buffer)
                 historical_loaded = True
 

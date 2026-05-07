@@ -103,6 +103,9 @@ wss.on('connection', async (ws, req) => {
             } else if (cmd.type === 'GET_HISTORY') {
                 const history = await db.getTrades();
                 ws.send(JSON.stringify({ type: 'HISTORY_DATA', data: history }));
+            } else if (cmd.type === 'GET_LAST_TS') {
+                const lastTs = await db.getLastTimestamp();
+                ws.send(JSON.stringify({ type: 'LAST_TS', data: lastTs }));
             } else if (cmd.type === 'NEW_DATA' && cmd.data) {
                 db.insertTrades(cmd.data).catch(() => {});
                 broadcast(cmd);

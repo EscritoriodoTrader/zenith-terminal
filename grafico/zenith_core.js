@@ -308,27 +308,58 @@ function drawScales(range) {
         staticTimeCtx.fillStyle = themeColor; staticTimeCtx.fillRect(0, 18, tW, 17);
 
         const cW = (canvas.width / dpr - rightMargin) / visibleCandles;
-        staticTimeCtx.fillStyle = scaleFontColor; staticTimeCtx.font = `${scaleFontSize}px Arial`; staticTimeCtx.textAlign = "center";
+        staticTimeCtx.font = `${scaleFontSize}px Arial`;
 
         let iStart = Math.max(0, Math.floor((horizontalScroll - rightMargin) / cW));
         let iEnd = Math.min(chartData.length - 1, Math.ceil((tW + horizontalScroll) / cW));
-        const skip = Math.ceil(60 / cW);
+        const skip = Math.max(1, Math.ceil(60 / cW));
 
-        for (let i = iStart; i <= iEnd; i++) {
+        let lastDay = -1;
+
+        for (let i = iEnd; i >= iStart; i--) {
+            if (!chartData[i]) continue;
+            const c = chartData[i];
+            const x = (canvas.width / dpr - rightMargin) - (i * cW) + horizontalScroll;
+            
+            // HORAS
             if (i % skip === 0) {
-                const x = (canvas.width / dpr - rightMargin) - (i * cW) + horizontalScroll;
                 if (x > 0 && x < tW) {
-                    const c = chartData[i];
+                    staticTimeCtx.textAlign = "center";
+                    staticTimeCtx.fillStyle = scaleFontColor;
                     const label = `${String(c.timestamp.getHours()).padStart(2, '0')}:${String(c.timestamp.getMinutes()).padStart(2, '0')}`;
-                    staticTimeCtx.fillText(label, x, 15);
+                    staticTimeCtx.fillText(label, x, 13);
                 }
             }
-        }
 
-        if (chartData[0]) {
-            staticTimeCtx.fillStyle = scaleFontColor; staticTimeCtx.font = `bold ${scaleFontSize}px Arial`;
-            const dateStr = `${String(chartData[0].timestamp.getDate()).padStart(2, '0')}/${String(chartData[0].timestamp.getMonth() + 1).padStart(2, '0')}`;
-            staticTimeCtx.fillText(dateStr, tW / 2, 30);
+            // DATAS
+            const currentDay = c.timestamp.getDate();
+            const currentMonth = c.timestamp.getMonth();
+            
+            if (lastDay === -1) {
+                const monthNames = ["jan", "fev", "mar", "abr", "mai", "jun", "jul", "ago", "set", "out", "nov", "dez"];
+                const dateStr = `${String(currentDay).padStart(2, '0')}/${monthNames[currentMonth]}`;
+                staticTimeCtx.textAlign = "left";
+                staticTimeCtx.fillStyle = "rgba(255,255,255,0.6)";
+                staticTimeCtx.fillText(dateStr, 10, 30); // Fixo no lado esquerdo da tela
+                lastDay = currentDay;
+            } else if (lastDay !== currentDay) {
+                if (x > 0 && x < tW) {
+                    // Linha separadora vertical
+                    staticTimeCtx.beginPath();
+                    staticTimeCtx.moveTo(x, 18);
+                    staticTimeCtx.lineTo(x, 35);
+                    staticTimeCtx.strokeStyle = "rgba(255,255,255,0.4)";
+                    staticTimeCtx.lineWidth = 1;
+                    staticTimeCtx.stroke();
+                    
+                    const monthNames = ["jan", "fev", "mar", "abr", "mai", "jun", "jul", "ago", "set", "out", "nov", "dez"];
+                    const dateStr = `${String(currentDay).padStart(2, '0')}/${monthNames[currentMonth]}`;
+                    staticTimeCtx.textAlign = "left";
+                    staticTimeCtx.fillStyle = "rgba(255,255,255,0.8)";
+                    staticTimeCtx.fillText(dateStr, x + 8, 30);
+                }
+                lastDay = currentDay;
+            }
         }
         staticTimeCtx.restore();
         needsScaleRedraw = false;

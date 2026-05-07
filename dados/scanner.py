@@ -176,15 +176,34 @@ def process_time(val, now):
         ms = 0
         h, m, s = 0, 0, 0
 
+        year, month, day = now.year, now.month, now.day
+        has_explicit_date = False
+
         if isinstance(val, datetime.datetime):
             h, m, s, ms = val.hour, val.minute, val.second, val.microsecond // 1000
+            if val.year > 2000:
+                year, month, day = val.year, val.month, val.day
+                has_explicit_date = True
         elif isinstance(val, (float, int)):
             # Formato Serial do Excel
-            seconds = int(val * 86400)
+            if val >= 1.0:
+                excel_date = datetime.datetime(1899, 12, 30) + datetime.timedelta(days=val)
+                year, month, day = excel_date.year, excel_date.month, excel_date.day
+                has_explicit_date = True
+                
+            seconds = int((val % 1) * 86400)
             h, m, s = (seconds // 3600) % 24, (seconds // 60) % 60, seconds % 60
         else:
             v_str = str(val).strip().replace(',', '.')
-            time_part = v_str.split(' ')[-1] if ' ' in v_str else v_str
+            if ' ' in v_str and '/' in v_str.split(' ')[0]:
+                date_part = v_str.split(' ')[0]
+                time_part = v_str.split(' ')[-1]
+                dp = date_part.split('/')
+                if len(dp) >= 3:
+                    day, month, year = int(dp[0]), int(dp[1]), int(dp[2])
+                    has_explicit_date = True
+            else:
+                time_part = v_str.split(' ')[-1] if ' ' in v_str else v_str
             
             if '.' in time_part:
                 time_part, ms_str = time_part.split('.')
@@ -195,10 +214,12 @@ def process_time(val, now):
             m = int(p[1]) if len(p) > 1 else 0
             s = int(p[2]) if len(p) > 2 else 0
 
-        dt = now.replace(hour=h, minute=m, second=s, microsecond=ms * 1000)
-        # Ajuste de Fuso Horário/Virada de Dia
-        if dt > now + datetime.timedelta(hours=2): 
-            dt -= datetime.timedelta(days=1)
+        dt = now.replace(year=year, month=month, day=day, hour=h, minute=m, second=s, microsecond=ms * 1000)
+        
+        if not has_explicit_date:
+            # Ajuste de Fuso Horário/Virada de Dia (APENAS se a data não vier do Excel)
+            if dt > now + datetime.timedelta(hours=2): 
+                dt -= datetime.timedelta(days=1)
             
         return int(dt.timestamp() * 1000), dt.strftime('%H:%M:%S')
     except Exception as e:

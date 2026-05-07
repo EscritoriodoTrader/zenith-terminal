@@ -310,16 +310,21 @@ def read_excel_history(sent_buffer):
         
         if hist_trades:
             if is_full_sync:
-                ws_client.send(json.dumps({"type": "START_HISTORY", "count": len(hist_trades)}))
+                try: ws_client.send(json.dumps({"type": "START_HISTORY", "count": len(hist_trades)}))
+                except: pass
                 
-            for i in range(0, len(hist_trades), 1000):
-                batch = hist_trades[i:i+1000]
-                ws_client.send(json.dumps({"type": "NEW_DATA", "asset": "HISTORICO", "data": batch}))
-                if (i // 1000) % 20 == 0 and i > 0:
-                    print(f"[SISTEMA]: Enviando histórico para a nuvem... {i} trades enviados.")
-            
-            if is_full_sync:
-                ws_client.send(json.dumps({"type": "END_HISTORY"}))
+            try:
+                for i in range(0, len(hist_trades), 1000):
+                    batch = hist_trades[i:i+1000]
+                    try: ws_client.send(json.dumps({"type": "NEW_DATA", "asset": "HISTORICO", "data": batch}))
+                    except: pass
+                    if (i // 1000) % 20 == 0 and i > 0:
+                        print(f"[SISTEMA]: Enviando histórico para a nuvem... {i} trades enviados.")
+                    time.sleep(0.05) # Pausa vital para não engasgar o buffer do WebSocket e da Nuvem
+            finally:
+                if is_full_sync:
+                    try: ws_client.send(json.dumps({"type": "END_HISTORY"}))
+                    except: pass
                 
             last_history_uid = temp_last_uid
             print(f"[SISTEMA]: Sincronização concluída. {len(hist_trades)} trades enviados para a nuvem.")

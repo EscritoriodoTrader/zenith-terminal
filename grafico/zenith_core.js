@@ -409,7 +409,7 @@ function draw() {
         // Lógica do botão Snap-Back (Voltar ao presente)
         const snapBtn = document.getElementById('snap-back');
         if (snapBtn) {
-            if (horizontalScroll > 20) {
+            if (horizontalScroll > 20 || horizontalScroll < -50) {
                 snapBtn.classList.add('visible');
             } else {
                 snapBtn.classList.remove('visible');
@@ -712,12 +712,28 @@ function drawSingleCandle(targetCtx, c, i, range, cW, tickH) {
 canvas.onwheel = (e) => {
     e.preventDefault();
     const rect = canvas.getBoundingClientRect();
+    const dpr = window.devicePixelRatio || 1;
+    const canvasH = canvas.height / dpr;
     const mX = (e.clientX - rect.left) * (canvas.width / rect.width);
+    const mY = (e.clientY - rect.top) * (canvas.height / rect.height);
     
     if (e.ctrlKey) {
-        // Zoom Vertical (Preço)
+        // Zoom Vertical (Preço) Ancorado no Mouse
+        const oldTickH = verticalZoom;
         const delta = e.deltaY > 0 ? -2 : 2;
         verticalZoom = Math.max(10, Math.min(100, verticalZoom + delta));
+        
+        if (oldTickH !== verticalZoom) {
+            isAutoScale = false;
+            const rangeOld = (canvasH / oldTickH) * 0.25;
+            const rangeNew = (canvasH / verticalZoom) * 0.25;
+            
+            const mouseRatio = mY / canvasH;
+            const priceAtMouse = priceMax - (mouseRatio * rangeOld);
+            
+            priceMax = priceAtMouse + (mouseRatio * rangeNew);
+            priceMin = priceMax - rangeNew;
+        }
     } else {
         // Zoom Horizontal (Tempo) ancorado no Cursor
         handleZoom(e.deltaY < 0 ? 1 : -1, mX);
@@ -739,6 +755,7 @@ canvas.onmousemove = (e) => {
         lY = e.clientY;
         
         horizontalScroll += dX;
+        horizontalScroll = Math.max(- (canvas.width / (window.devicePixelRatio || 1)) / 1.5, horizontalScroll); // Limite de espaço futuro
         
         // Se arrastar verticalmente, desativa o auto-ajuste temporariamente
         if (Math.abs(dY) > 2) isAutoScale = false;
@@ -1498,6 +1515,7 @@ function handleZoom(delta, mouseX) {
     if (oldVisible !== visibleCandles) {
         const cwAfter = (canvas.width - rightMargin) / visibleCandles;
         horizontalScroll = distToRight - (candlesToRight * cwAfter);
+        horizontalScroll = Math.max(- (canvas.width / (window.devicePixelRatio || 1)) / 1.5, horizontalScroll); // Limite futuro
         
         needsAutoScale = true;
         needsHistoryRedraw = true;

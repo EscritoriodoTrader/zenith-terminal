@@ -119,6 +119,7 @@ async function loadSettingsFromServer() {
             if (cfg.negOutlineColor) { negOutlineColor = cfg.negOutlineColor; setStorage('zenith_neg_outline', negOutlineColor); }
             if (cfg.lastPriceBgColor) { lastPriceBgColor = cfg.lastPriceBgColor; setStorage('zenith_last_price_bg', lastPriceBgColor); }
             if (cfg.lastPriceLineColor) { lastPriceLineColor = cfg.lastPriceLineColor; setStorage('zenith_last_price_line', lastPriceLineColor); }
+            if (cfg.shortcuts) { shortcuts = cfg.shortcuts; setStorage('zenith_shortcuts', JSON.stringify(shortcuts)); }
 
             // Aplicar CSS e UI
             document.documentElement.style.setProperty('--theme-bg', themeColor);
@@ -135,7 +136,8 @@ async function saveSettingsToServer() {
     const config = {
         chartBgColor, themeColor, posColor, negColor, currentTimeframe, filters,
         scaleFontSize, scaleFontColor, footprintBgColor, footprintFontColor,
-        posOutlineColor, negOutlineColor, lastPriceBgColor, lastPriceLineColor
+        posOutlineColor, negOutlineColor, lastPriceBgColor, lastPriceLineColor,
+        shortcuts
     };
     try {
         await fetch('/api/settings', {
@@ -1728,6 +1730,7 @@ function initShortcutRecording() {
                 input.value = combo.replace(/Key|Digit/g, '').replace('Equal', '+').replace('Minus', '-');
                 
                 localStorage.setItem('zenith_shortcuts', JSON.stringify(shortcuts));
+                saveSettingsToServer();
                 input.classList.remove('recording');
                 window.removeEventListener('keydown', captureKey, true);
             };

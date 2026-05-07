@@ -259,6 +259,9 @@ def read_excel_history(sent_buffer):
             
         print("[SISTEMA]: Sincronizando aba 'Historico' com Precisão BlackArrow...")
         
+        # Se o servidor não tinha nada, é um full sync e o gráfico precisa do sinal
+        is_full_sync = (last_historical_ts == 0)
+        
         last_row = sheet_hist.range("A" + str(sheet_hist.cells.last_cell.row)).end('up').row
         if last_row < 2: return
         
@@ -306,12 +309,18 @@ def read_excel_history(sent_buffer):
                 temp_last_uid = uid
         
         if hist_trades:
+            if is_full_sync:
+                ws_client.send(json.dumps({"type": "START_HISTORY", "count": len(hist_trades)}))
+                
             for i in range(0, len(hist_trades), 1000):
                 batch = hist_trades[i:i+1000]
                 ws_client.send(json.dumps({"type": "NEW_DATA", "asset": "HISTORICO", "data": batch}))
                 if (i // 1000) % 20 == 0 and i > 0:
                     print(f"[SISTEMA]: Enviando histórico para a nuvem... {i} trades enviados.")
             
+            if is_full_sync:
+                ws_client.send(json.dumps({"type": "END_HISTORY"}))
+                
             last_history_uid = temp_last_uid
             print(f"[SISTEMA]: Sincronização concluída. {len(hist_trades)} trades enviados para a nuvem.")
         

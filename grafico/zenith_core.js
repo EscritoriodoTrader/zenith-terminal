@@ -1174,8 +1174,8 @@ function connectMotor() {
                     const ov = document.getElementById('waiting-data');
                     if (ov) ov.style.display = 'none';
                 }
-                // Atualiza o Ativo e Variação - apenas quando vem dado real (nao historico)
-                if (msg.asset && msg.asset !== 'HISTORICO' && msg.asset !== '---') {
+                // Atualiza o Ativo - apenas quando vem dado real (nao historico, nao vazio)
+                if (msg.asset && msg.asset !== 'HISTORICO' && msg.asset.trim() !== '') {
                     const assetElem = document.querySelector('.asset-name');
                     if (assetElem) {
                         const tfLabel = currentTimeframe.toUpperCase().replace('MIN', 'M');

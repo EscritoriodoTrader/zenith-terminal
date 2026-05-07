@@ -252,11 +252,17 @@ def on_message(ws, message):
             else:
                 print("[SISTEMA]: O banco do servidor está limpo.")
         elif t == 'CLEAR_CHART':
-            history_already_read = False
+            history_already_read = True  # nao reler automaticamente
             last_ts_received = False
             last_historical_ts = 0
             sent_trades_buffer.clear()
-            print("[SISTEMA]: Comando de RESET recebido. Memória de IDs limpa e aba 'Historico' liberada.")
+            # Apaga os dados do banco de dados tambem
+            try:
+                session.post(f"{HTTP_PROTOCOL}://{SERVER_HOST}/api/trades/clear", timeout=10)
+                print("[SISTEMA]: Banco de dados LIMPO com sucesso via reset.")
+            except Exception as e:
+                print(f"[SISTEMA]: Erro ao limpar banco: {e}")
+            print("[SISTEMA]: Comando de RESET recebido. Memoria limpa.")
         elif t == 'RELOAD_HISTORY':
             # Botao "Montar Historico" pressionado no grafico
             history_already_read = False
@@ -588,6 +594,10 @@ def main():
                     historical_loaded = False
                 time.sleep(1)
                 continue
+
+            # Verifica se o usuario pediu para montar o historico (via botao)
+            if not history_already_read and is_active:
+                read_text_history(sent_trades_buffer)
 
             if not rtd_client:
                 try:

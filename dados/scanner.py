@@ -116,15 +116,22 @@ class DirectRTDClient:
         
         if self.callback.has_updates:
             self.callback.has_updates = False
-            data = self.rtd.RefreshData(0)
-            if data and len(data) == 2:
-                topic_ids = data[0]
-                values = data[1]
-                for i in range(len(topic_ids)):
-                    tid = topic_ids[i]
-                    val = values[i]
-                    if tid in self.topics:
-                        self.data_cache[self.topics[tid]] = val
+            result = self.rtd.RefreshData(0)
+            # No comtypes, parametros [in, out] retornam como tupla.
+            # O result sera (topicCount, safearray)
+            if result and len(result) >= 2:
+                topic_count = result[0]
+                safearray = result[1]
+                
+                # safearray tem 2 dimensoes: [0] = TopicIDs, [1] = Valores
+                if safearray and len(safearray) == 2:
+                    topic_ids = safearray[0]
+                    values = safearray[1]
+                    for i in range(len(topic_ids)):
+                        tid = topic_ids[i]
+                        val = values[i]
+                        if tid in self.topics:
+                            self.data_cache[self.topics[tid]] = val
             return True
         return False
         

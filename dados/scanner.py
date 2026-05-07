@@ -6,6 +6,7 @@ import threading
 import queue
 import websocket
 import json
+import concurrent.futures
 
 # ==========================================
 # CONFIGURAÇÕES DO SISTEMA
@@ -314,15 +315,22 @@ def read_excel_history(sent_buffer):
                 except: pass
                 
             try:
-                for i in range(0, len(hist_trades), 2000):
-                    batch = hist_trades[i:i+2000]
-                    payload = {"type": "NEW_DATA", "asset": "HISTORICO", "data": batch}
+                def send_batch(batch, index):
                     try:
-                        session.post(POST_URL, json=payload, timeout=10)
+                        session.post(POST_URL, json={"type": "NEW_DATA", "asset": "HISTORICO", "data": batch}, timeout=15)
+                        if index > 0 and index % 4 == 0:
+                            print(f"[SISTEMA]: Enviando histórico para a nuvem... {index * 5000} trades concluídos.")
                     except: pass
+
+                with concurrent.futures.ThreadPoolExecutor(max_workers=6) as executor:
+                    futures = []
+                    batch_idx = 0
+                    for i in range(0, len(hist_trades), 5000):
+                        batch = hist_trades[i:i+5000]
+                        futures.append(executor.submit(send_batch, batch, batch_idx))
+                        batch_idx += 1
                     
-                    if i > 0 and (i // 2000) % 5 == 0:
-                        print(f"[SISTEMA]: Enviando histórico para a nuvem... {i} trades enviados.")
+                    concurrent.futures.wait(futures)
             finally:
                 if is_full_sync:
                     try: ws_client.send(json.dumps({"type": "END_HISTORY"}))

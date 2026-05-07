@@ -54,6 +54,7 @@ class DirectRTDClient:
         self.data_cache = {}
         self.info_subscribed = False  # Flag para assinar info apos saber o ativo
         self.next_tid = 5000          # IDs reservados para os canais de info
+        self.last_known_asset = None  # Detecta troca de ativo ao vivo
         
         try:
             import comtypes.client
@@ -131,6 +132,21 @@ class DirectRTDClient:
         except Exception:
             pass
             
+    def _unsubscribe_info(self):
+        """Cancela assinatura dos canais informativos do ativo anterior"""
+        info_keys = ["INFO_ULTIMO","INFO_ABERTURA","INFO_MAXIMA","INFO_MINIMA",
+                     "INFO_FECHAMENTO","INFO_VARIACAO","INFO_AJUSTE","INFO_VOLUME","INFO_VWAP"]
+        for key in info_keys:
+            self.data_cache.pop(key, None)
+        # Cancela as inscricoes pelo reverse lookup de topics
+        tids_to_remove = [tid for tid, name in self.topics.items() if name in info_keys]
+        for tid in tids_to_remove:
+            try: self.rtd.DisconnectData(tid)
+            except: pass
+            del self.topics[tid]
+        self.info_subscribed = False
+        print("[RTD DIRETO]: Canais informativos do ativo anterior cancelados.")
+
     def refresh(self):
         import pythoncom
         pythoncom.PumpWaitingMessages()
@@ -151,13 +167,18 @@ class DirectRTDClient:
                             self.data_cache[self.topics[tid]] = val
             
             # Apos primeiro refresh, verifica se ja temos o nome do ativo
-            # Se sim, e ainda nao assinamos os info channels, fazemos agora
-            if not self.info_subscribed:
+            # Tambem detecta mudanca de ativo ao vivo
+            if not self.info_subscribed or self.data_cache.get("ASSET_NAME") != self.last_known_asset:
                 raw_name = self.data_cache.get("ASSET_NAME", "")
-                if raw_name and str(raw_name).strip() and str(raw_name).strip() != "---":
-                    # O simbolo do RTD informativo pode ser o mesmo nome ou com sufixo _M_0
-                    # Tenta primeiro com o nome exato
-                    self._subscribe_info(str(raw_name).strip())
+                if raw_name and str(raw_name).strip() and str(raw_name).strip() not in ("", "---"):
+                    new_name = str(raw_name).strip()
+                    if new_name != self.last_known_asset:
+                        if self.info_subscribed:
+                            # Ativo mudou! Cancela o antigo e assina o novo
+                            print(f"[RTD DIRETO]: Troca de ativo detectada! {self.last_known_asset} -> {new_name}")
+                            self._unsubscribe_info()
+                        self._subscribe_info(new_name)
+                        self.last_known_asset = new_name
             return True
         return False
         

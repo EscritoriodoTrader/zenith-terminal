@@ -51,7 +51,9 @@ class DirectRTDClient:
         self.ExcelLib = None
         self.asset_name = "---"
         self.topics = {} 
-        self.data_cache = {} 
+        self.data_cache = {}
+        self.info_subscribed = False  # Flag para assinar info apos saber o ativo
+        self.next_tid = 5000          # IDs reservados para os canais de info
         
         try:
             import comtypes.client
@@ -104,6 +106,23 @@ class DirectRTDClient:
             self._subscribe(tid, ("T&T1", "AGR", str(i)), f"SELL_AGR_{i}"); tid+=1
             
         print(f"[RTD DIRETO]: {tid} canais assinados (500 traders por T&T). Zero dependencia de Excel!")
+
+    def _subscribe_info(self, symbol):
+        """Assina os canais informativos (max, min, abertura, ultimo, vwap, var) de forma dinamica"""
+        print(f"[RTD DIRETO]: Assinando canais informativos para o ativo: {symbol}")
+        tid = self.next_tid
+        self._subscribe(tid, (symbol, "ULT"), "INFO_ULTIMO");   tid += 1
+        self._subscribe(tid, (symbol, "ABE"), "INFO_ABERTURA"); tid += 1
+        self._subscribe(tid, (symbol, "MAX"), "INFO_MAXIMA");   tid += 1
+        self._subscribe(tid, (symbol, "MIN"), "INFO_MINIMA");   tid += 1
+        self._subscribe(tid, (symbol, "FEC"), "INFO_FECHAMENTO"); tid += 1
+        self._subscribe(tid, (symbol, "VAR"), "INFO_VARIACAO"); tid += 1
+        self._subscribe(tid, (symbol, "AJA"), "INFO_AJUSTE");   tid += 1
+        self._subscribe(tid, (symbol, "100"), "INFO_VOLUME");   tid += 1
+        self._subscribe(tid, (symbol, "67"),  "INFO_VWAP");     tid += 1
+        self.next_tid = tid
+        self.info_subscribed = True
+        print(f"[RTD DIRETO]: Canais informativos de {symbol} assinados com sucesso!")
         
     def _subscribe(self, topic_id, args, internal_name):
         try:
@@ -119,13 +138,9 @@ class DirectRTDClient:
         if self.callback.has_updates:
             self.callback.has_updates = False
             result = self.rtd.RefreshData(0)
-            # No comtypes, parametros [in, out] retornam como tupla.
-            # O result sera (topicCount, safearray)
             if result and len(result) >= 2:
                 topic_count = result[0]
                 safearray = result[1]
-                
-                # safearray tem 2 dimensoes: [0] = TopicIDs, [1] = Valores
                 if safearray and len(safearray) == 2:
                     topic_ids = safearray[0]
                     values = safearray[1]
@@ -134,6 +149,15 @@ class DirectRTDClient:
                         val = values[i]
                         if tid in self.topics:
                             self.data_cache[self.topics[tid]] = val
+            
+            # Apos primeiro refresh, verifica se ja temos o nome do ativo
+            # Se sim, e ainda nao assinamos os info channels, fazemos agora
+            if not self.info_subscribed:
+                raw_name = self.data_cache.get("ASSET_NAME", "")
+                if raw_name and str(raw_name).strip() and str(raw_name).strip() != "---":
+                    # O simbolo do RTD informativo pode ser o mesmo nome ou com sufixo _M_0
+                    # Tenta primeiro com o nome exato
+                    self._subscribe_info(str(raw_name).strip())
             return True
         return False
         
@@ -164,12 +188,28 @@ class DirectRTDClient:
                 sells.append((dt_s, pr_s, qt_s, side))
                 
         self.asset_name = str(self.data_cache.get("ASSET_NAME", "---"))
-        # Descobre current_price usando o trade mais recente de compra (ou venda)
-        last_price = 0
-        if self.data_cache.get("BUY_PRE_0"): last_price = self.data_cache.get("BUY_PRE_0")
-        elif self.data_cache.get("SELL_PRE_0"): last_price = self.data_cache.get("SELL_PRE_0")
         
-        return buys + sells, self.asset_name, last_price
+        # Prioridade para info RTD informativo, fallback para o preco do ultimo trade
+        last_price = clean_price(self.data_cache.get("INFO_ULTIMO", 0)) or 0
+        if not last_price:
+            if self.data_cache.get("BUY_PRE_0"): last_price = self.data_cache.get("BUY_PRE_0")
+            elif self.data_cache.get("SELL_PRE_0"): last_price = self.data_cache.get("SELL_PRE_0")
+        
+        variation = clean_variation(self.data_cache.get("INFO_VARIACAO", 0)) or 0
+        
+        info = {
+            "ultimo":     self.data_cache.get("INFO_ULTIMO"),
+            "abertura":   self.data_cache.get("INFO_ABERTURA"),
+            "maxima":     self.data_cache.get("INFO_MAXIMA"),
+            "minima":     self.data_cache.get("INFO_MINIMA"),
+            "fechamento": self.data_cache.get("INFO_FECHAMENTO"),
+            "variacao":   variation,
+            "ajuste":     self.data_cache.get("INFO_AJUSTE"),
+            "volume":     self.data_cache.get("INFO_VOLUME"),
+            "vwap":       self.data_cache.get("INFO_VWAP"),
+        }
+        
+        return buys + sells, self.asset_name, last_price, variation, info
 
 def on_message(ws, message):
     global is_active, ws_client, history_requested, history_already_read, sent_trades_buffer
@@ -538,10 +578,9 @@ def main():
                     continue
 
             rtd_client.refresh()
-            raw_trades, asset_name, current_price_raw = rtd_client.get_trades()
+            raw_trades, asset_name, current_price_raw, variation, info = rtd_client.get_trades()
             
             current_price = clean_price(current_price_raw) if current_price_raw else last_price_sent
-            variation = 0 # Pode ser mapeado no futuro
             
             new_trades = []
             now = datetime.datetime.now()
@@ -567,10 +606,10 @@ def main():
                         new_trades.append({"id": uid, "timestamp": ts, "price": p, "quantity": q, "side": side})
                         sent_trades_buffer.add(uid)
 
-            # Transmissão de Dados
+            # Transmissao de Dados
             if new_trades or current_price != last_price_sent or variation != last_variation_sent:
                 if new_trades:
-                    print(f"[{datetime.datetime.now().strftime('%H:%M:%S')}] >>> ENVIANDO {len(new_trades)} NEGÓCIOS | {asset_name} | {current_price} <<<")
+                    print(f"[{datetime.datetime.now().strftime('%H:%M:%S')}] >>> ENVIANDO {len(new_trades)} NEGOCIOS | {asset_name} | {current_price} <<<")
                 
                 if new_trades: new_trades.sort(key=lambda x: x['timestamp'])
                 
@@ -586,13 +625,13 @@ def main():
             else:
                 if time.time() - last_wait_log > 2:
                     status_motor = "LIGADO" if is_active else "STANDBY"
-                    print(f"[{datetime.datetime.now().strftime('%H:%M:%S')}] [VIVO] Motor: {status_motor} | Ativo: {asset_name} | Lendo RTD...")
+                    print(f"[{datetime.datetime.now().strftime('%H:%M:%S')}] [VIVO] Motor: {status_motor} | Ativo: {asset_name} | ULT: {current_price} | VAR: {variation}%")
                     last_wait_log = time.time()
 
             time.sleep(SCAN_INTERVAL)
         except Exception as e:
             print(f"[RTD ERROR]: {e}")
-            sheet_rtd = None
+            rtd_client = None
             time.sleep(1)
 
 if __name__ == "__main__":

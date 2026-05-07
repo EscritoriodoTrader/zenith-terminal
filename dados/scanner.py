@@ -246,7 +246,12 @@ def read_excel_history(sent_buffer):
         if not sheet_hist: return
             
         print("[SISTEMA]: Sincronizando aba 'Historico' com Precisão BlackArrow...")
-        data = sheet_hist.range("A2:F1000000").value
+        
+        last_row = sheet_hist.range("A" + str(sheet_hist.cells.last_cell.row)).end('up').row
+        if last_row < 2: return
+        
+        data = sheet_hist.range(f"A2:F{last_row}").value
+        if not isinstance(data[0], list): data = [data]
         
         hist_trades = []
         temp_last_uid = None
@@ -271,6 +276,8 @@ def read_excel_history(sent_buffer):
             
             if len(hist_trades) < 5:
                 print(f"[DEBUG]: Lendo linha {len(hist_trades)+2} | Agressor Original: '{row[5]}' -> Traduzido para: {side}")
+            elif len(hist_trades) % 5000 == 0:
+                print(f"[SISTEMA]: Lendo histórico... já processados {len(hist_trades)} trades.")
             
             # Gera ID Único com Sequência para não perder trades idênticos
             base_id = f"{side}_{ts}_{p}_{q}"
@@ -289,6 +296,8 @@ def read_excel_history(sent_buffer):
             for i in range(0, len(hist_trades), 1000):
                 batch = hist_trades[i:i+1000]
                 ws_client.send(json.dumps({"type": "NEW_DATA", "asset": "HISTORICO", "data": batch}))
+                if (i // 1000) % 20 == 0 and i > 0:
+                    print(f"[SISTEMA]: Enviando histórico para a nuvem... {i} trades enviados.")
             
             # SINAL DE FIM: O Gráfico processa tudo e sobe a cortina
             ws_client.send(json.dumps({"type": "END_HISTORY"}))

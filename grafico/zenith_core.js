@@ -1516,6 +1516,15 @@ if (toolClear) {
         if (!confirm("Deseja realmente LIMPAR os negócios? Isso vai zerar o histórico no navegador e no banco de dados, mas manterá suas cores e configurações.")) return;
 
         console.log("🗑️ LIMPANDO NEGÓCIOS (RESET DE HISTÓRICO)...");
+        
+        // MOSTRA A TELA DE CARREGAMENTO PARA O RESET
+        const ov = document.getElementById('waiting-data');
+        if (ov) {
+            ov.style.display = 'flex';
+            const textElem = ov.querySelector('.waiting-text');
+            if (textElem) textElem.innerText = "LIMPANDO DADOS DA NUVEM, AGUARDE...";
+        }
+
         // 1. Limpa Memória Local
         chartData = []; chartDataMap.clear(); processedTradeIds.clear(); rawTrades = [];
 
@@ -1533,13 +1542,25 @@ if (toolClear) {
                 if (socket && socket.readyState === WebSocket.OPEN) {
                     socket.send(JSON.stringify({ type: 'CLEAR_CHART' }));
                 }
-                alert("HISTÓRICO ZERADO! O terminal será recarregado.");
-                window.location.reload();
+                
+                if (ov) {
+                    const textElem = ov.querySelector('.waiting-text');
+                    if (textElem) textElem.innerText = "NUVEM VAZIA! RECARREGANDO...";
+                }
+                
+                setTimeout(() => {
+                    window.location.reload();
+                }, 1000);
             })
             .catch(err => {
                 console.error("Erro ao limpar banco:", err);
-                alert("Erro ao limpar banco de dados, mas a memória local foi zerada.");
-                window.location.reload();
+                if (ov) {
+                    const textElem = ov.querySelector('.waiting-text');
+                    if (textElem) textElem.innerText = "ERRO AO LIMPAR. RECARREGANDO...";
+                }
+                setTimeout(() => {
+                    window.location.reload();
+                }, 1500);
             });
     };
 }

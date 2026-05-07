@@ -1,4 +1,3 @@
-import xlwings as xw
 import time
 import requests
 import datetime
@@ -7,13 +6,11 @@ import queue
 import websocket
 import json
 import concurrent.futures
-
-# ==========================================
+import pythoncom
+import socket
 # CONFIGURAÇÕES DO SISTEMA
 # ==========================================
-EXCEL_FILE_NAME = "Fluxo.xlsm"
-SHEET_RTD = "Dados_RTD"
-SHEET_HISTORICO = "Historico"
+# Não usamos mais Excel!
 
 # Tenta usar Localhost se o server estiver rodando na mesma máquina
 LOCAL_SERVER = "127.0.0.1:10000"
@@ -46,6 +43,124 @@ history_requested = False
 history_already_read = False
 last_ts_received = False
 sent_trades_buffer = set()
+
+class DirectRTDClient:
+    def __init__(self):
+        self.rtd = None
+        self.callback = None
+        self.ExcelLib = None
+        self.asset_name = "---"
+        self.topics = {} 
+        self.data_cache = {} 
+        
+        try:
+            import comtypes.client
+            try:
+                self.ExcelLib = comtypes.client.GetModule(('{00020813-0000-0000-C000-000000000046}', 1, 9))
+            except Exception:
+                self.ExcelLib = comtypes.client.GetModule(('{00020813-0000-0000-C000-000000000046}', 1, 8))
+        except Exception as e:
+            print("[RTD DIRETO ERRO]: Nao foi possivel carregar comtypes ou ExcelLib.")
+            raise e
+
+    def connect(self):
+        import comtypes.client
+        from comtypes import COMObject
+        print("[RTD DIRETO]: Iniciando conexão COM com a BlackArrow...")
+        self.rtd = comtypes.client.CreateObject("rtdtrading.rtdserver", interface=self.ExcelLib.IRtdServer)
+        
+        class RTDCallback(COMObject):
+            _com_interfaces_ = [self.ExcelLib.IRTDUpdateEvent]
+            def __init__(self, client):
+                super(RTDCallback, self).__init__()
+                self.client = client
+                self._HeartbeatInterval = -1
+                self.has_updates = False
+            def UpdateNotify(self):
+                self.has_updates = True
+            def _get_HeartbeatInterval(self): return self._HeartbeatInterval
+            def _set_HeartbeatInterval(self, value): self._HeartbeatInterval = value
+            def Disconnect(self): pass
+            
+        self.callback = RTDCallback(self)
+        self.rtd.ServerStart(self.callback)
+        print("[RTD DIRETO]: Conexão estabelecida! Assinando canais...")
+        
+        self._subscribe(1, ("T&T0", "INFO", "ATV"), "ASSET_NAME")
+        
+        self.max_tt_lines = 100
+        tid = 10
+        for i in range(self.max_tt_lines):
+            self._subscribe(tid, ("T&T0", "DAT", str(i)), f"BUY_DAT_{i}"); tid+=1
+            self._subscribe(tid, ("T&T0", "PRE", str(i)), f"BUY_PRE_{i}"); tid+=1
+            self._subscribe(tid, ("T&T0", "QUL", str(i)), f"BUY_QUL_{i}"); tid+=1
+            self._subscribe(tid, ("T&T0", "AGR", str(i)), f"BUY_AGR_{i}"); tid+=1
+            
+            self._subscribe(tid, ("T&T1", "DAT", str(i)), f"SELL_DAT_{i}"); tid+=1
+            self._subscribe(tid, ("T&T1", "PRE", str(i)), f"SELL_PRE_{i}"); tid+=1
+            self._subscribe(tid, ("T&T1", "QUL", str(i)), f"SELL_QUL_{i}"); tid+=1
+            self._subscribe(tid, ("T&T1", "AGR", str(i)), f"SELL_AGR_{i}"); tid+=1
+            
+        print(f"[RTD DIRETO]: {tid} canais assinados com sucesso. Zero dependencia de Excel!")
+        
+    def _subscribe(self, topic_id, args, internal_name):
+        try:
+            self.rtd.ConnectData(topic_id, args, True)
+            self.topics[topic_id] = internal_name
+        except Exception:
+            pass
+            
+    def refresh(self):
+        import ctypes
+        ctypes.windll.user32.MsgWaitForMultipleObjects(0, 0, 0, 10, 255)
+        
+        if self.callback.has_updates:
+            self.callback.has_updates = False
+            data = self.rtd.RefreshData(0)
+            if data and len(data) == 2:
+                topic_ids = data[0]
+                values = data[1]
+                for i in range(len(topic_ids)):
+                    tid = topic_ids[i]
+                    val = values[i]
+                    if tid in self.topics:
+                        self.data_cache[self.topics[tid]] = val
+            return True
+        return False
+        
+    def get_trades(self):
+        buys = []
+        sells = []
+        for i in range(self.max_tt_lines):
+            dt = self.data_cache.get(f"BUY_DAT_{i}")
+            pr = self.data_cache.get(f"BUY_PRE_{i}")
+            qt = self.data_cache.get(f"BUY_QUL_{i}")
+            ag = self.data_cache.get(f"BUY_AGR_{i}")
+            
+            if dt and pr and qt:
+                ag_val = str(ag).strip().upper() if ag else ""
+                if "VEND" in ag_val or "S" in ag_val: side = "SELL"
+                else: side = "BUY"
+                buys.append((dt, pr, qt, side))
+                
+            dt_s = self.data_cache.get(f"SELL_DAT_{i}")
+            pr_s = self.data_cache.get(f"SELL_PRE_{i}")
+            qt_s = self.data_cache.get(f"SELL_QUL_{i}")
+            ag_s = self.data_cache.get(f"SELL_AGR_{i}")
+            
+            if dt_s and pr_s and qt_s:
+                ag_s_val = str(ag_s).strip().upper() if ag_s else ""
+                if "COMPR" in ag_s_val or "B" in ag_s_val: side = "BUY"
+                else: side = "SELL"
+                sells.append((dt_s, pr_s, qt_s, side))
+                
+        self.asset_name = str(self.data_cache.get("ASSET_NAME", "---"))
+        # Descobre current_price usando o trade mais recente de compra (ou venda)
+        last_price = 0
+        if self.data_cache.get("BUY_PRE_0"): last_price = self.data_cache.get("BUY_PRE_0")
+        elif self.data_cache.get("SELL_PRE_0"): last_price = self.data_cache.get("SELL_PRE_0")
+        
+        return buys + sells, self.asset_name, last_price
 
 def on_message(ws, message):
     global is_active, ws_client, history_requested, history_already_read, sent_trades_buffer
@@ -160,15 +275,7 @@ def clear_database():
     except Exception as e:
         print(f"[INIT ERROR]: Falha ao resetar banco: {e}")
 
-def get_sheet(name):
-    try:
-        if len(xw.apps) == 0: return None
-        for app in xw.apps:
-            for book in app.books:
-                if EXCEL_FILE_NAME in book.name:
-                    return book.sheets[name]
-        return None
-    except: return None
+# Excel remanescente deletado
 
 def process_time(val, now):
     try:
@@ -377,11 +484,12 @@ def read_text_history(sent_buffer):
         print(f"[ERRO HISTORICO TEXTO]: {e}")
 
 def main():
+    pythoncom.CoInitialize()
     global last_historical_ts, history_already_read, sent_trades_buffer, is_active
-    print("--- ZENITH SCANNER V6.9.1: MOTOR SINCRONIZADO ---")
+    print("--- ZENITH SCANNER V7.0.0: MOTOR DIRETO (SEM EXCEL) ---")
     threading.Thread(target=tx_worker, daemon=True).start()
     
-    sheet_rtd = None
+    rtd_client = None
     last_price_sent = 0
     last_variation_sent = -999
     historical_loaded = False
@@ -394,7 +502,7 @@ def main():
                     print("[STATUS]: Aguardando o motor ser ligado no gráfico...")
                     last_wait_log = time.time()
                 
-                if historical_loaded: # Se estava ligado e agora desligou
+                if historical_loaded:
                     print("[STATUS]: Motor em STANDBY. Limpando memória local...")
                     sent_trades_buffer.clear()
                     historical_loaded = False
@@ -402,9 +510,8 @@ def main():
                 continue
 
             if not history_already_read and is_active:
-                print(f"[{datetime.datetime.now().strftime('%H:%M:%S')}] Motor Ligado! Verificando histórico na nuvem...")
+                print(f"[{datetime.datetime.now().strftime('%H:%M:%S')}] Motor Ligado! Lendo histórico...")
                 
-                # Espera o servidor devolver qual foi o último trade salvo
                 wait_start = time.time()
                 while not last_ts_received and time.time() - wait_start < 5:
                     time.sleep(0.1)
@@ -412,87 +519,44 @@ def main():
                 read_text_history(sent_trades_buffer)
                 historical_loaded = True
 
-            if not sheet_rtd:
-                # Tenta vários nomes comuns de abas
-                for name in ["Dados_RTD", "RTD", "Fluxo", "Planilha1"]:
-                    sheet_rtd = get_sheet(name)
-                    if sheet_rtd: 
-                        print(f"[RTD]: Conectado com sucesso à aba '{name}'.")
-                        break
-                
-                if not sheet_rtd:
-                    print("[AVISO]: Não encontrei a aba de dados no Excel. Verifique se o nome é 'Dados_RTD' ou 'RTD'.")
+            if not rtd_client:
+                try:
+                    rtd_client = DirectRTDClient()
+                    rtd_client.connect()
+                except Exception as e:
+                    print(f"[RTD ERRO]: Falha ao conectar. Feche a BlackArrow e abra novamente se persistir. Erro: {e}")
                     time.sleep(5)
                     continue
 
-            # Leitura do Tempo Real (Duas Tabelas: Compra A-D | Venda G-J)
-            data = sheet_rtd.range("A8:J507").value
-            if not data or not data[0]:
-                time.sleep(0.1)
-                continue
-
-            # Leitura do Cabeçalho (Ativo A2 | Preço C2 | Variação H2)
-            try:
-                asset_name = str(sheet_rtd.range("A2").value or "---")
-                current_price = clean_price(sheet_rtd.range("C2").value)
-                variation = clean_variation(sheet_rtd.range("H2").value)
-                
-                variation = clean_variation(sheet_rtd.range("H2").value)
-            except:
-                asset_name = "---"
-                current_price = 0
-                variation = 0
+            rtd_client.refresh()
+            raw_trades, asset_name, current_price_raw = rtd_client.get_trades()
+            
+            current_price = clean_price(current_price_raw) if current_price_raw else last_price_sent
+            variation = 0 # Pode ser mapeado no futuro
             
             new_trades = []
             now = datetime.datetime.now()
             ts_counters = {}
 
             global history_requested
-            for row in data:
-                if not row: continue
-
-                # COMPRAS (Coluna A-D)
-                try:
-                    if row[0] and row[1] and row[2]:
-                        ts, time_str = process_time(row[0], now)
-                        if ts and ts >= last_historical_ts:
-                            p = clean_price(row[1])
-                            q = int(float(str(row[2]).replace(',', '.')))
-                            side = "BUY"
-                            
-                            base_id = f"{side}_{ts}_{p}_{q}"
-                            ts_counters[base_id] = ts_counters.get(base_id, 0) + 1
-                            uid = f"{base_id}_seq{ts_counters[base_id]}"
-                            
-                            if uid not in sent_trades_buffer:
-                                new_trades.append({"id": uid, "timestamp": ts, "price": p, "quantity": q, "side": side})
-                                sent_trades_buffer.add(uid)
-                except Exception as e:
-                    pass
-
-                # VENDAS (Coluna G-J)
-                try:
-                    if row[6] and row[7] and row[8]:
-                        ts, time_str = process_time(row[6], now)
-                        if ts and ts >= last_historical_ts:
-                            p = clean_price(row[7])
-                            q = int(float(str(row[8]).replace(',', '.')))
-                            side = "SELL"
-                            
-                            base_id = f"{side}_{ts}_{p}_{q}"
-                            ts_counters[base_id] = ts_counters.get(base_id, 0) + 1
-                            uid = f"{base_id}_seq{ts_counters[base_id]}"
-                            
-                            if uid not in sent_trades_buffer:
-                                new_trades.append({"id": uid, "timestamp": ts, "price": p, "quantity": q, "side": side})
-                                sent_trades_buffer.add(uid)
-                except Exception as e:
-                    pass
-
-            # Sincronização de histórico finalizada
-
-            if len(sent_trades_buffer) > 40000:
-                sent_trades_buffer = set(list(sent_trades_buffer)[-20000:])
+            for row in raw_trades:
+                dt_str, p_val, q_val, side = row
+                
+                ts, time_str = process_time(dt_str, now)
+                if ts and ts >= last_historical_ts:
+                    p = clean_price(p_val)
+                    try:
+                        q = int(float(str(q_val).replace(',', '.')))
+                    except:
+                        q = 1
+                    
+                    base_id = f"{side}_{ts}_{p}_{q}"
+                    ts_counters[base_id] = ts_counters.get(base_id, 0) + 1
+                    uid = f"{base_id}_seq{ts_counters[base_id]}"
+                    
+                    if uid not in sent_trades_buffer:
+                        new_trades.append({"id": uid, "timestamp": ts, "price": p, "quantity": q, "side": side})
+                        sent_trades_buffer.add(uid)
 
             # Transmissão de Dados
             if new_trades or current_price != last_price_sent or variation != last_variation_sent:

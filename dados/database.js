@@ -120,4 +120,20 @@ async function getLastTimestamp() {
     }
 }
 
-module.exports = { initDatabase, clearDatabase, insertTrades, getTrades, getLastTimestamp };
+/**
+ * Recupera trades com timestamp maior que o fornecido (para preencher gap RTD apos historico)
+ */
+async function getTradesAfter(timestamp) {
+    try {
+        const res = await pool.query(
+            "SELECT * FROM trades WHERE timestamp > $1 ORDER BY timestamp ASC",
+            [timestamp]
+        );
+        return res.rows;
+    } catch (err) {
+        console.error("[DB ERROR]: Erro ao buscar trades apos timestamp:", err);
+        return [];
+    }
+}
+
+module.exports = { initDatabase, clearDatabase, insertTrades, getTrades, getLastTimestamp, getTradesAfter };

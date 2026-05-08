@@ -589,7 +589,9 @@ def read_text_history(sent_buffer):
                     concurrent.futures.wait(futures)
             finally:
                 if is_full_sync:
-                    try: ws_client.send(json.dumps({"type": "END_HISTORY"}))
+                    # Pega o ultimo timestamp do arquivo para o server buscar o gap do RTD
+                    last_file_ts = hist_trades[-1]['timestamp'] if hist_trades else 0
+                    try: ws_client.send(json.dumps({"type": "END_HISTORY", "lastFileTs": last_file_ts}))
                     except: pass
                 
             last_history_uid = temp_last_uid

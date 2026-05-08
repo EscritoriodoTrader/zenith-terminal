@@ -113,6 +113,23 @@ wss.on('connection', async (ws, req) => {
             } else if (cmd.type === 'NEW_DATA' && cmd.data) {
                 db.insertTrades(cmd.data).catch(() => {});
                 broadcast(cmd);
+            } else if (cmd.type === 'END_HISTORY') {
+                // Arquivo foi enviado. Agora busca trades do RTD que ja estao no banco
+                // mas nao estao no arquivo (gap entre arquivo e agora)
+                const lastFileTs = cmd.lastFileTs || 0;
+                if (lastFileTs > 0) {
+                    try {
+                        const gapTrades = await db.getTradesAfter(lastFileTs);
+                        if (gapTrades.length > 0) {
+                            console.log(`[WS]: Preenchendo gap RTD: ${gapTrades.length} trades do banco (apos ${new Date(lastFileTs).toLocaleTimeString()})`);
+                            broadcast({ type: 'NEW_DATA', asset: 'GAP_RTD', data: gapTrades });
+                        }
+                    } catch (e) {
+                        console.error('[WS]: Erro ao buscar gap RTD:', e.message);
+                    }
+                }
+                // So entao avisa o grafico que terminou
+                broadcast({ type: 'END_HISTORY' });
             } else {
                 broadcast(cmd);
             }

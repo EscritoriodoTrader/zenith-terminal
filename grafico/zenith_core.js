@@ -1363,39 +1363,30 @@ function processTrades(trades) {
 
                 if (Math.abs(diff) >= pointLimit) {
                     // O trade atual atinge/rompe o limite!
-                    // Ele deve pertencer ao candle ANTIGO para que a extremidade não fique sem volume.
-                    candle.close = currentPrice;
-                    if (currentPrice > candle.high) candle.high = currentPrice;
-                    if (currentPrice < candle.low) candle.low = currentPrice;
-
-                    const pS = currentPrice.toFixed(2);
-                    if (!candle.ticks[pS]) candle.ticks[pS] = { buy: 0, sell: 0, p: currentPrice };
-                    if (t.side.toUpperCase() === 'BUY') candle.ticks[pS].buy += t.quantity;
-                    else candle.ticks[pS].sell += t.quantity;
-
-                    const totalV = candle.ticks[pS].buy + candle.ticks[pS].sell;
-                    if (totalV > (candle.maxV || 0)) candle.maxV = totalV;
-
-                    // Fecha o candle atual no limite exato
+                    // Na lógica BlackArrow, este trade pertence ao PRÓXIMO candle.
+                    
+                    // 1. Fecha o candle atual no limite exato (sem o volume deste trade)
                     const direction = diff > 0 ? 1 : -1;
                     const exactClose = candle.open + (direction * pointLimit);
                     candle.close = exactClose;
+                    
                     if (direction > 0) candle.high = Math.max(candle.high, exactClose);
                     else candle.low = Math.min(candle.low, exactClose);
 
-                    // Cria o próximo candle
+                    // 2. Abre o próximo candle começando exatamente onde o anterior fechou
                     const nextOpen = exactClose;
                     candle = {
                         timestamp: new Date(ts),
                         open: nextOpen, high: nextOpen, low: nextOpen, close: nextOpen,
                         ticks: {}, maxV: 0, isPoint: true
                     };
-                    chartData.unshift(candle); // NOVO CANDLE NO TOPO
+                    chartData.unshift(candle); 
                     addedNewCandle = true;
                     
-                    // O trade já foi processado no candle antigo
-                    finishedProcessingTrade = true;
+                    // NÃO marcamos finishedProcessingTrade = true.
+                    // O loop 'while' rodará novamente e processará este mesmo trade no NOVO candle.
                 } else {
+                    // O trade está dentro do limite do candle atual
                     candle.close = currentPrice;
                     if (currentPrice > candle.high) candle.high = currentPrice;
                     if (currentPrice < candle.low) candle.low = currentPrice;

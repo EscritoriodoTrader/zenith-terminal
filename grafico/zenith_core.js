@@ -87,10 +87,21 @@ let isMountingHistory = false;
 const priceFormatter = new Intl.NumberFormat('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 document.documentElement.style.setProperty('--theme-bg', themeColor);
 
+// CACHE DE CORES - Evita reconverter hexToRgba 1000x vezes por frame
+const rgbaCache = new Map();
 function hexToRgba(hex, opacity) {
-    if (!hex || hex.length < 7) return `rgba(255, 255, 255, ${opacity / 100})`;
+    const cacheKey = `${hex}|${opacity}`;
+    if (rgbaCache.has(cacheKey)) return rgbaCache.get(cacheKey);
+    
+    if (!hex || hex.length < 7) {
+        const result = `rgba(255, 255, 255, ${opacity / 100})`;
+        rgbaCache.set(cacheKey, result);
+        return result;
+    }
     let r = parseInt(hex.slice(1, 3), 16), g = parseInt(hex.slice(3, 5), 16), b = parseInt(hex.slice(5, 7), 16);
-    return `rgba(${r}, ${g}, ${b}, ${opacity / 100})`;
+    const result = `rgba(${r}, ${g}, ${b}, ${opacity / 100})`;
+    rgbaCache.set(cacheKey, result);
+    return result;
 }
 
 function isModalOpen() {
@@ -401,6 +412,10 @@ function drawScales(range) {
 
 let hoverTarget = null;
 let hoverStartTime = 0;
+// MEMOIZAÇÃO: Cache da última posição processada para evitar recalcular a cada pixel
+let lastTooltipMouseX = -9999;
+let lastTooltipMouseY = -9999;
+const TOOLTIP_RECALC_DISTANCE = 5; // Só recalcula se mouse se moveu mais de 5px
 
 // 7. RENDERIZAÇÃO DO GRÁFICO
 function draw() {
@@ -564,6 +579,16 @@ function drawInteractionLayers(range, cW, dpr) {
 }
 
 function processTooltip(range, cW, dpr) {
+    // OTIMIZAÇÃO: Só recalcula se o mouse se moveu significativamente
+    const distX = Math.abs(mousePos.x - lastTooltipMouseX);
+    const distY = Math.abs(mousePos.y - lastTooltipMouseY);
+    if (distX < TOOLTIP_RECALC_DISTANCE && distY < TOOLTIP_RECALC_DISTANCE && hoverTarget) {
+        return; // Usa resultado anterior
+    }
+    
+    lastTooltipMouseX = mousePos.x;
+    lastTooltipMouseY = mousePos.y;
+    
     let hoveredCandle = null;
     let iStartH = Math.max(0, Math.floor((horizontalScroll - rightMargin) / cW));
     let iEndH = Math.min(chartData.length - 1, Math.ceil((canvas.width / dpr - rightMargin + horizontalScroll + cW) / cW));
@@ -685,10 +710,14 @@ function drawSingleCandle(targetCtx, c, i, range, cW, tickH) {
     targetCtx.textAlign = "center";
     targetCtx.textBaseline = "middle"; 
 
-    // LOOP POR TODOS OS NÍVEIS DE PREÇO (Evita buracos no candle)
-    for (let pNum = c.low; pNum <= c.high + 0.01; pNum += 0.25) {
-        if (pNum < priceMin - 0.5 || pNum > priceMax + 0.5) continue;
-
+    // OTIMIZAÇÃO: Calcular apenas o intervalo visível de ticks (evita 80% das iterações)
+    const minVisiblePrice = Math.floor(priceMin * 4) / 4; // Arredondar para múltiplo de 0.25
+    const maxVisiblePrice = Math.ceil(priceMax * 4) / 4;
+    const startPrice = Math.max(c.low, minVisiblePrice);
+    const endPrice = Math.min(c.high + 0.01, maxVisiblePrice);
+    
+    // LOOP POR APENAS OS TICKS VISÍVEIS (Em vez de todos)
+    for (let pNum = startPrice; pNum <= endPrice; pNum += 0.25) {
         const pS = pNum.toFixed(2);
         const t = c.ticks[pS] || { buy: 0, sell: 0 }; // Se não existe, cria um fake com zero
         const y = canvasH - ((pNum - priceMin) / range) * canvasH;
@@ -738,7 +767,10 @@ function drawSingleCandle(targetCtx, c, i, range, cW, tickH) {
     }
 }
 
-// 8. INTERATIVIDADE E UI
+// THROTTLING PARA PERFORMANCE - Limita redraw a ~10 vezes por segundo em vez de 60
+let lastDragUpdate = 0;
+const THROTTLE_DELAY = 50; // ms (reduz de 60fps para ~20fps durante arrasto)
+
 // 8. INTERATIVIDADE E UI
 canvas.onwheel = (e) => {
     e.preventDefault();
@@ -780,6 +812,16 @@ canvas.onmousemove = (e) => {
     mousePos.y = (e.clientY - rect.top) * (canvas.height / rect.height);
     
     if (isDrag) {
+        const now = Date.now();
+        const timeSinceLastUpdate = now - lastDragUpdate;
+        
+        // THROTTLE: Só atualiza desenho a cada THROTTLE_DELAY ms
+        if (timeSinceLastUpdate < THROTTLE_DELAY) {
+            return; // Atualiza mousePos, mas não redesenha canvas
+        }
+        
+        lastDragUpdate = now;
+        
         const dX = e.clientX - lX;
         const dY = e.clientY - lY;
         lX = e.clientX;

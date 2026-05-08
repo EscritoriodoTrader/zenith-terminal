@@ -209,8 +209,20 @@ class DirectRTDClient:
                     if new_name != self.last_known_asset:
                         if self.info_subscribed:
                             # Ativo mudou! Cancela o antigo e assina o novo
-                            print(f"[RTD DIRETO]: Troca de ativo detectada! {self.last_known_asset} -> {new_name}")
+                            old_name = self.last_known_asset
+                            print(f"[RTD DIRETO]: Troca de ativo detectada! {old_name} -> {new_name}")
                             self._unsubscribe_info()
+                            # Notifica o frontend para resetar o grafico automaticamente
+                            try:
+                                if ws_client and ws_client.sock and ws_client.sock.connected:
+                                    ws_client.send(json.dumps({
+                                        "type": "ASSET_CHANGED",
+                                        "oldAsset": old_name,
+                                        "newAsset": new_name
+                                    }))
+                                    print(f"[RTD DIRETO]: Sinal ASSET_CHANGED enviado ao grafico: {old_name} -> {new_name}")
+                            except Exception as e:
+                                print(f"[RTD DIRETO]: Erro ao notificar troca de ativo: {e}")
                         self._subscribe_info(new_name)
                         self.last_known_asset = new_name
             return True

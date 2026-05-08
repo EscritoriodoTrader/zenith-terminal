@@ -1168,6 +1168,52 @@ function connectMotor() {
                 }
             }
 
+            // TROCA DE ATIVO AUTOMÁTICA — Dispara quando o ativo muda no RTD da BlackArrow
+            if (msg.type === 'ASSET_CHANGED') {
+                console.log(`[ATIVO]: Troca detectada! ${msg.oldAsset} → ${msg.newAsset}. Resetando gráfico...`);
+
+                // 1. Limpa todos os dados do gráfico e memória de trades
+                chartData = [];
+                chartDataMap.clear();
+                processedTradeIds.clear();
+                rawTrades = [];
+
+                // 2. Limpa cache visual imediatamente
+                historyCanvasCache.width = historyCanvasCache.width;
+                needsHistoryRedraw = true;
+                needsScaleRedraw = true;
+
+                // 3. Reseta o preço e dados externos — o próximo NEW_DATA vai atualizar
+                externalLastPrice = 0;
+                hasRealData = false;
+
+                // 4. Atualiza o nome do ativo na interface
+                const assetElem = document.querySelector('.asset-name');
+                if (assetElem) {
+                    const tfLabel = currentTimeframe.toUpperCase().replace('MIN', 'M');
+                    assetElem.innerHTML = `${msg.newAsset} <span id="tf-display">${tfLabel}</span>`;
+                }
+
+                // 5. Reseta a variação
+                const varElem = document.getElementById('variation');
+                if (varElem) {
+                    varElem.innerText = '---%';
+                    varElem.style.color = '#787b86';
+                    varElem.style.opacity = '0.5';
+                }
+
+                // 6. Mostra overlay temporário de "Carregando novo ativo"
+                const ov = document.getElementById('waiting-data');
+                if (ov) {
+                    ov.style.display = 'flex';
+                    const textElem = ov.querySelector('.waiting-text');
+                    if (textElem) textElem.innerText = `CARREGANDO ${msg.newAsset}...`;
+                }
+
+                // 7. Redesenha (mostrará tela vazia enquanto aguarda dados do novo ativo)
+                draw();
+            }
+
             if (msg.type === 'MARKET_DATA' || msg.type === 'NEW_TRADES' || msg.type === 'NEW_DATA') {
                 // Limpeza de avisos (SÓ ESCONDE SE NÃO FOR HISTÓRICO)
                 if (msg.asset !== "HISTORICO") {
@@ -1359,32 +1405,50 @@ function processTrades(trades) {
             let finishedProcessingTrade = false;
 
             while (!finishedProcessingTrade) {
-                const diff = currentPrice - candle.open;
+                const diff = Math.round((currentPrice - candle.open) * 100) / 100; // evita float imprecision
+                const absDiff = Math.abs(diff);
 
-                if (Math.abs(diff) >= pointLimit) {
-                    // O trade atual atinge/rompe o limite!
-                    // Na lógica BlackArrow, este trade pertence ao PRÓXIMO candle.
-                    
-                    // 1. Fecha o candle atual no limite exato (sem o volume deste trade)
+                if (absDiff >= pointLimit) {
+                    // O trade atingiu ou ultrapassou o limite de 10P.
+                    // Regra BlackArrow: o trade que ATINGE o limite fecha o candle ATUAL.
+                    // O high/low pode ultrapassar o ponto de fechamento (ex: low=7336.25 em candle fechado em 7337.50).
                     const direction = diff > 0 ? 1 : -1;
-                    const exactClose = candle.open + (direction * pointLimit);
-                    candle.close = exactClose;
+                    const exactClose = Math.round((candle.open + direction * pointLimit) * 100) / 100;
                     
-                    if (direction > 0) candle.high = Math.max(candle.high, exactClose);
-                    else candle.low = Math.min(candle.low, exactClose);
+                    // O trade causou o fechamento — atualiza high/low com o preço REAL do trade
+                    // (pode ultrapassar o limite, como 7336.25 sendo mínima mesmo com fechamento em 7337.50)
+                    if (currentPrice > candle.high) candle.high = currentPrice;
+                    if (currentPrice < candle.low) candle.low = currentPrice;
+                    
+                    // Fecha o candle no limite exato (não no preço do trade)
+                    candle.close = exactClose;
 
-                    // 2. Abre o próximo candle começando exatamente onde o anterior fechou
+                    // Registra o volume deste trade no candle atual (no preço real do trade)
+                    const pS = currentPrice.toFixed(2);
+                    if (!candle.ticks[pS]) candle.ticks[pS] = { buy: 0, sell: 0, p: currentPrice };
+                    if (t.side.toUpperCase() === 'BUY') candle.ticks[pS].buy += t.quantity;
+                    else candle.ticks[pS].sell += t.quantity;
+                    const totalV = candle.ticks[pS].buy + candle.ticks[pS].sell;
+                    if (totalV > (candle.maxV || 0)) candle.maxV = totalV;
+
+                    // Abre o próximo candle exatamente onde o anterior fechou
                     const nextOpen = exactClose;
                     candle = {
                         timestamp: new Date(ts),
                         open: nextOpen, high: nextOpen, low: nextOpen, close: nextOpen,
                         ticks: {}, maxV: 0, isPoint: true
                     };
-                    chartData.unshift(candle); 
+                    chartData.unshift(candle);
                     addedNewCandle = true;
-                    
-                    // NÃO marcamos finishedProcessingTrade = true.
-                    // O loop 'while' rodará novamente e processará este mesmo trade no NOVO candle.
+
+                    // Se o trade original foi ALÉM do limite (ex: trade em 7336.25 com limite em 7337.50),
+                    // o próximo candle precisa registrar a diferença restante.
+                    // Se caiu exatamente no limite, encerra.
+                    if (Math.abs(Math.round((currentPrice - nextOpen) * 100) / 100) < 0.001) {
+                        finishedProcessingTrade = true;
+                    }
+                    // Caso contrário: o while roda de novo no novo candle com currentPrice
+                    // (para o caso raro de saltos muito grandes que cruzam múltiplas faixas)
                 } else {
                     // O trade está dentro do limite do candle atual
                     candle.close = currentPrice;

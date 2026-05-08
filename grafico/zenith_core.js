@@ -31,21 +31,21 @@ function showCustomConfirm(message, onConfirm) {
     const textEl = document.getElementById('custom-confirm-text');
     const btnYes = document.getElementById('custom-confirm-yes');
     const btnNo = document.getElementById('custom-confirm-no');
-
+    
     if (!modal || !textEl || !btnYes || !btnNo) {
         if (confirm(message)) onConfirm();
         return;
     }
-
+    
     textEl.innerText = message;
     modal.style.display = 'flex';
-
+    
     const cleanup = () => {
         modal.style.display = 'none';
         btnYes.onclick = null;
         btnNo.onclick = null;
     };
-
+    
     btnYes.onclick = () => { cleanup(); onConfirm(); };
     btnNo.onclick = () => { cleanup(); };
 }
@@ -250,7 +250,7 @@ function autoScale() {
             const currentRange = priceMax - priceMin;
             priceMax = currentP + (currentRange / 2);
             priceMin = currentP - (currentRange / 2);
-
+            
             needsHistoryRedraw = true;
             needsScaleRedraw = true;
         }
@@ -320,7 +320,7 @@ function drawScales(range) {
             if (!chartData[i]) continue;
             const c = chartData[i];
             const x = (canvas.width / dpr - rightMargin) - (i * cW) + horizontalScroll;
-
+            
             // HORAS
             if (i % skip === 0) {
                 if (x > 0 && x < tW) {
@@ -334,13 +334,13 @@ function drawScales(range) {
             // DATAS
             const currentDay = c.timestamp.getDate();
             const currentMonth = c.timestamp.getMonth();
-
+            
             if (lastDay === -1) {
                 const monthNames = ["jan", "fev", "mar", "abr", "mai", "jun", "jul", "ago", "set", "out", "nov", "dez"];
                 const dateStr = `${String(currentDay).padStart(2, '0')}/${monthNames[currentMonth]}`;
-                staticTimeCtx.textAlign = "left";
+                staticTimeCtx.textAlign = "center";
                 staticTimeCtx.fillStyle = "rgba(255,255,255,0.6)";
-                staticTimeCtx.fillText(dateStr, 10, 30); // Fixo no lado esquerdo da tela
+                staticTimeCtx.fillText(dateStr, tW / 2, 30); // Centralizado na tela
                 lastDay = currentDay;
             } else if (lastDay !== currentDay) {
                 if (x > 0 && x < tW) {
@@ -351,7 +351,7 @@ function drawScales(range) {
                     staticTimeCtx.strokeStyle = "rgba(255,255,255,0.4)";
                     staticTimeCtx.lineWidth = 1;
                     staticTimeCtx.stroke();
-
+                    
                     const monthNames = ["jan", "fev", "mar", "abr", "mai", "jun", "jul", "ago", "set", "out", "nov", "dez"];
                     const dateStr = `${String(currentDay).padStart(2, '0')}/${monthNames[currentMonth]}`;
                     staticTimeCtx.textAlign = "left";
@@ -416,7 +416,7 @@ function draw() {
         // RECALCULAR RANGE BASEADO NA ALTURA FIXA DO TICK
         const tickH = verticalZoom;
         const range = ((canvas.height / dpr) / tickH) * 0.25;
-
+        
         // Sincroniza priceMax/Min com o centro atual e o novo range
         const centerP = (priceMax + priceMin) / 2;
         priceMax = centerP + (range / 2);
@@ -434,7 +434,7 @@ function draw() {
                 needsHistoryRedraw = true; // Garante que as velas antigas não sumam
             }
         }
-
+        
         // Se o rádio não estiver verde (desconectado), o motor Status UI deve refletir
 
         // Lógica do botão Snap-Back (Voltar ao presente)
@@ -470,30 +470,30 @@ function draw() {
                 statusColor = "#f23645";
             } else if (motorStatus === 'off') {
                 statusText = "Ligar Power";
-                const iconColor = "#089981";
-                const textColor = "#ffffff";
-
+                const iconColor = "#089981"; 
+                const textColor = "#ffffff"; 
+                
                 ctx.font = "bold 26px Arial";
                 const textWidth = ctx.measureText(statusText).width;
                 const iconSize = 24;
                 const gap = 15;
                 const totalWidth = iconSize + gap + textWidth;
                 const startX = centerX - (totalWidth / 2);
-
+                
                 // Desenha Ícone de Power Centralizado Verticalmente
                 ctx.save();
                 ctx.strokeStyle = iconColor;
                 ctx.lineWidth = 3.5;
                 ctx.lineCap = "round";
-                const iconX = startX + iconSize / 2;
+                const iconX = startX + iconSize/2;
                 const iconY = centerY; // Centralizado no Y real
-
+                
                 ctx.beginPath();
-                ctx.arc(iconX, iconY, iconSize / 2, -Math.PI / 3.5, Math.PI + Math.PI / 3.5);
+                ctx.arc(iconX, iconY, iconSize/2, -Math.PI/3.5, Math.PI + Math.PI/3.5);
                 ctx.stroke();
-
+                
                 ctx.beginPath();
-                ctx.moveTo(iconX, iconY - iconSize / 2);
+                ctx.moveTo(iconX, iconY - iconSize/2);
                 ctx.lineTo(iconX, iconY);
                 ctx.stroke();
                 ctx.restore();
@@ -634,13 +634,13 @@ function drawSingleCandle(targetCtx, c, i, range, cW, tickH) {
     const dpr = window.devicePixelRatio || 1;
     const canvasH = canvas.height / dpr;
     const x = (canvas.width / dpr - rightMargin) - (i * cW) + horizontalScroll;
-
+    
     // Posições Verticais
     const yO = canvasH - ((c.open - priceMin) / range) * canvasH;
     const yC = canvasH - ((c.close - priceMin) / range) * canvasH;
     const yH = canvasH - ((c.high - priceMin) / range) * canvasH;
     const yL = canvasH - ((c.low - priceMin) / range) * canvasH;
-
+    
     const uW = cW * 0.90;
     const isBull = c.close >= c.open;
     const color = isBull ? posOutlineColor : negOutlineColor;
@@ -650,18 +650,18 @@ function drawSingleCandle(targetCtx, c, i, range, cW, tickH) {
         targetCtx.save();
         targetCtx.strokeStyle = color;
         targetCtx.lineWidth = Math.max(1, cW * 0.1);
-
+        
         // Desenha o Pavio (Wick)
         targetCtx.beginPath();
         targetCtx.moveTo(x, yH);
         targetCtx.lineTo(x, yL);
         targetCtx.stroke();
-
+        
         // Desenha o Corpo (Body)
         targetCtx.fillStyle = color;
         const bodyH = Math.max(1, Math.abs(yC - yO));
         targetCtx.fillRect(x - uW / 2, Math.min(yO, yC), uW, bodyH);
-
+        
         targetCtx.restore();
         return; // Finaliza aqui para não desenhar os números (Footprint)
     }
@@ -671,7 +671,7 @@ function drawSingleCandle(targetCtx, c, i, range, cW, tickH) {
 
     // Borda da Vela (Afinada para 1.0)
     targetCtx.beginPath();
-    targetCtx.strokeStyle = color;
+    targetCtx.strokeStyle = color; 
     targetCtx.lineWidth = 1.0;
     targetCtx.strokeRect(x - uW / 2, Math.min(yO, yC), uW, Math.max(1, Math.abs(yC - yO)));
     targetCtx.stroke();
@@ -683,7 +683,7 @@ function drawSingleCandle(targetCtx, c, i, range, cW, tickH) {
 
     targetCtx.font = "bold 10px Arial"; // Negrito para garantir nitidez máxima
     targetCtx.textAlign = "center";
-    targetCtx.textBaseline = "middle";
+    targetCtx.textBaseline = "middle"; 
 
     // LOOP POR TODOS OS NÍVEIS DE PREÇO (Evita buracos no candle)
     for (let pNum = c.low; pNum <= c.high + 0.01; pNum += 0.25) {
@@ -705,8 +705,8 @@ function drawSingleCandle(targetCtx, c, i, range, cW, tickH) {
             });
         }
 
-        const boxH = Math.max(1, tickH);
-        const startY = y - tickH / 2;
+        const boxH = Math.max(1, tickH); 
+        const startY = y - tickH / 2;    
         targetCtx.fillStyle = footprintBgColor;
         targetCtx.fillRect(Math.round(x - bW / 4), startY, Math.round(bW / 2), boxH);
 
@@ -747,21 +747,21 @@ canvas.onwheel = (e) => {
     const canvasH = canvas.height / dpr;
     const mX = (e.clientX - rect.left) * (canvas.width / rect.width);
     const mY = (e.clientY - rect.top) * (canvas.height / rect.height);
-
+    
     if (e.ctrlKey) {
         // Zoom Vertical (Preço) Ancorado no Mouse
         const oldTickH = verticalZoom;
         const delta = e.deltaY > 0 ? -2 : 2;
         verticalZoom = Math.max(10, Math.min(100, verticalZoom + delta));
-
+        
         if (oldTickH !== verticalZoom) {
             isAutoScale = false;
             const rangeOld = (canvasH / oldTickH) * 0.25;
             const rangeNew = (canvasH / verticalZoom) * 0.25;
-
+            
             const mouseRatio = mY / canvasH;
             const priceAtMouse = priceMax - (mouseRatio * rangeOld);
-
+            
             priceMax = priceAtMouse + (mouseRatio * rangeNew);
             priceMin = priceMax - rangeNew;
         }
@@ -778,24 +778,24 @@ canvas.onmousemove = (e) => {
     const rect = canvas.getBoundingClientRect();
     mousePos.x = (e.clientX - rect.left) * (canvas.width / rect.width);
     mousePos.y = (e.clientY - rect.top) * (canvas.height / rect.height);
-
+    
     if (isDrag) {
         const dX = e.clientX - lX;
         const dY = e.clientY - lY;
         lX = e.clientX;
         lY = e.clientY;
-
+        
         horizontalScroll += dX;
         horizontalScroll = Math.max(- (canvas.width / (window.devicePixelRatio || 1)) / 1.5, horizontalScroll); // Limite de espaço futuro
-
+        
         // Se arrastar verticalmente, desativa o auto-ajuste temporariamente
         if (Math.abs(dY) > 2) isAutoScale = false;
-
+        
         const r = priceMax - priceMin;
         const priceDelta = (dY / canvas.height) * r;
         priceMax += priceDelta;
         priceMin += priceDelta;
-
+        
         needsHistoryRedraw = true;
         needsScaleRedraw = true;
         draw();
@@ -822,15 +822,15 @@ window.onmouseup = () => { isDrag = false; canvas.style.cursor = activeTool === 
 scaleCanvas.onmousedown = (e) => { if (isModalOpen()) return; isDragS = true; lSY = e.clientY; };
 window.addEventListener('mousemove', (e) => {
     if (isDragS) {
-        isAutoScale = false;
-        const dY = lSY - e.clientY;
+        isAutoScale = false; 
+        const dY = lSY - e.clientY; 
         lSY = e.clientY;
-
+        
         // No modo fixo, arrastar a escala muda o TAMANHO da caixa (Zoom)
         verticalZoom += dY * 0.1;
         verticalZoom = Math.min(100, Math.max(5, verticalZoom));
-
-        needsHistoryRedraw = true;
+        
+        needsHistoryRedraw = true; 
         needsScaleRedraw = true;
     }
     if (isDragT) {
@@ -1110,7 +1110,7 @@ window.addEventListener('keydown', (e) => {
 function connectMotor() {
     // Se já estiver conectando ou aberto, não faz nada
     if (socket && (socket.readyState === WebSocket.CONNECTING || socket.readyState === WebSocket.OPEN)) return;
-
+    
     if (socket) socket.close();
 
     // Força WSS na nuvem (Render) e WS no local
@@ -1127,10 +1127,10 @@ function connectMotor() {
     socket.onopen = () => {
         console.log("[WS]: Rádio conectado. Sincronizando estado...");
         if (statusIcon) statusIcon.style.color = '#089981'; // Verde Zenith
-
+        
         const isRunning = (motorStatus === 'on');
         socket.send(JSON.stringify({ type: 'TOGGLE_MOTOR', running: isRunning }));
-
+        
         // Sempre pede o histórico ao conectar (resolve o problema do F5)
         socket.send(JSON.stringify({ type: 'GET_HISTORY' }));
     };
@@ -1233,7 +1233,7 @@ function connectMotor() {
                     externalLastPrice = msg.lastPrice;
                     if (!hasRealData) {
                         hasRealData = true;
-
+                        
                         // Ajusta a escala para o preço real (Nasdaq 28k)
                         const range = 50;
                         priceMax = externalLastPrice + (range / 2);
@@ -1277,7 +1277,7 @@ function connectMotor() {
                 setTimeout(() => {
                     try {
                         reaggregateChart();
-
+                        
                         if (!hasRealData && chartData.length > 0) {
                             hasRealData = true;
                             const lastC = chartData[0];
@@ -1290,11 +1290,11 @@ function connectMotor() {
                         const ov = document.getElementById('waiting-data');
                         if (ov) ov.style.display = 'none';
 
-                        historyCanvasCache.width = historyCanvasCache.width;
+                        historyCanvasCache.width = historyCanvasCache.width; 
                         needsHistoryRedraw = true;
                         draw();
                     }
-                }, 500);
+                }, 500); 
             }
 
             if (msg.type === 'HISTORICAL_TRADES' || msg.type === 'HISTORY_DATA') {
@@ -1414,12 +1414,12 @@ function processTrades(trades) {
                     // O high/low pode ultrapassar o ponto de fechamento (ex: low=7336.25 em candle fechado em 7337.50).
                     const direction = diff > 0 ? 1 : -1;
                     const exactClose = Math.round((candle.open + direction * pointLimit) * 100) / 100;
-
+                    
                     // O trade causou o fechamento — atualiza high/low com o preço REAL do trade
                     // (pode ultrapassar o limite, como 7336.25 sendo mínima mesmo com fechamento em 7337.50)
                     if (currentPrice > candle.high) candle.high = currentPrice;
                     if (currentPrice < candle.low) candle.low = currentPrice;
-
+                    
                     // Fecha o candle no limite exato (não no preço do trade)
                     candle.close = exactClose;
 
@@ -1462,7 +1462,7 @@ function processTrades(trades) {
 
                     const totalV = candle.ticks[pS].buy + candle.ticks[pS].sell;
                     if (totalV > (candle.maxV || 0)) candle.maxV = totalV;
-
+                    
                     finishedProcessingTrade = true;
                 }
             }
@@ -1501,7 +1501,7 @@ function processTrades(trades) {
         if (!isPointChart) {
             chartData.sort((a, b) => b.timestamp.getTime() - a.timestamp.getTime());
         }
-
+        
         needsHistoryRedraw = true;
         needsScaleRedraw = true;
         if (chartData.length > 0) autoScale();
@@ -1575,9 +1575,9 @@ document.addEventListener('click', (e) => {
         }
 
         if (socket && socket.readyState === WebSocket.OPEN) {
-            socket.send(JSON.stringify({
-                type: 'TOGGLE_MOTOR',
-                running: (motorStatus === 'on')
+            socket.send(JSON.stringify({ 
+                type: 'TOGGLE_MOTOR', 
+                running: (motorStatus === 'on') 
             }));
         } else if (newStatus === 'on') {
             connectMotor();
@@ -1617,13 +1617,13 @@ document.addEventListener('click', (e) => {
 function handleZoom(delta, mouseX) {
     const oldVisible = visibleCandles;
     const zoomSpeed = 0.9; // Ajuste de sensibilidade
-
+    
     // 1. Calcula a largura do candle ANTES do zoom
     const cwBefore = (canvas.width - rightMargin) / visibleCandles;
-
+    
     // 2. Localiza o mouse ou usa o centro
     const mX = (mouseX !== undefined) ? mouseX : (canvas.width / 2);
-
+    
     // 3. Calcula quantos candles existem entre o mouse e a borda direita ANTES do zoom
     const distToRight = canvas.width - rightMargin - mX;
     const candlesToRight = (distToRight - horizontalScroll) / cwBefore;
@@ -1640,7 +1640,7 @@ function handleZoom(delta, mouseX) {
         const cwAfter = (canvas.width - rightMargin) / visibleCandles;
         horizontalScroll = distToRight - (candlesToRight * cwAfter);
         horizontalScroll = Math.max(- (canvas.width / (window.devicePixelRatio || 1)) / 1.5, horizontalScroll); // Limite futuro
-
+        
         needsAutoScale = true;
         needsHistoryRedraw = true;
         draw();
@@ -1677,52 +1677,52 @@ if (toolClear) {
     toolClear.onclick = () => {
         showCustomConfirm("Deseja realmente LIMPAR os negócios? Isso vai zerar o histórico no navegador e no banco de dados, mas manterá suas cores e configurações.", () => {
             console.log("🗑️ LIMPANDO NEGÓCIOS (RESET DE HISTÓRICO)...");
+        
+        // MOSTRA A TELA DE CARREGAMENTO PARA O RESET
+        const ov = document.getElementById('waiting-data');
+        if (ov) {
+            ov.style.display = 'flex';
+            const textElem = ov.querySelector('.waiting-text');
+            if (textElem) textElem.innerText = "LIMPANDO DADOS DA NUVEM, AGUARDE...";
+        }
 
-            // MOSTRA A TELA DE CARREGAMENTO PARA O RESET
-            const ov = document.getElementById('waiting-data');
-            if (ov) {
-                ov.style.display = 'flex';
-                const textElem = ov.querySelector('.waiting-text');
-                if (textElem) textElem.innerText = "LIMPANDO DADOS DA NUVEM, AGUARDE...";
-            }
+        // 1. Limpa Memória Local
+        chartData = []; chartDataMap.clear(); processedTradeIds.clear(); rawTrades = [];
 
-            // 1. Limpa Memória Local
-            chartData = []; chartDataMap.clear(); processedTradeIds.clear(); rawTrades = [];
+        // 2. Limpa Cache Visual
+        historyCanvasCache.width = historyCanvasCache.width;
+        needsHistoryRedraw = true;
+        autoScale();
+        draw();
 
-            // 2. Limpa Cache Visual
-            historyCanvasCache.width = historyCanvasCache.width;
-            needsHistoryRedraw = true;
-            autoScale();
-            draw();
-
-            // 3. Limpa Banco de Dados Remoto (PostgreSQL)
-            fetch('/api/trades/clear', { method: 'POST' })
-                .then(() => {
-                    console.log("✅ Banco de dados limpo com sucesso.");
-                    // Avisa o motor Python para liberar a aba Historico
-                    if (socket && socket.readyState === WebSocket.OPEN) {
-                        socket.send(JSON.stringify({ type: 'CLEAR_CHART' }));
-                    }
-
-                    if (ov) {
-                        const textElem = ov.querySelector('.waiting-text');
-                        if (textElem) textElem.innerText = "NUVEM VAZIA! RECARREGANDO...";
-                    }
-
-                    setTimeout(() => {
-                        window.location.reload();
-                    }, 1000);
-                })
-                .catch(err => {
-                    console.error("Erro ao limpar banco:", err);
-                    if (ov) {
-                        const textElem = ov.querySelector('.waiting-text');
-                        if (textElem) textElem.innerText = "ERRO AO LIMPAR. RECARREGANDO...";
-                    }
-                    setTimeout(() => {
-                        window.location.reload();
-                    }, 1500);
-                });
+        // 3. Limpa Banco de Dados Remoto (PostgreSQL)
+        fetch('/api/trades/clear', { method: 'POST' })
+            .then(() => {
+                console.log("✅ Banco de dados limpo com sucesso.");
+                // Avisa o motor Python para liberar a aba Historico
+                if (socket && socket.readyState === WebSocket.OPEN) {
+                    socket.send(JSON.stringify({ type: 'CLEAR_CHART' }));
+                }
+                
+                if (ov) {
+                    const textElem = ov.querySelector('.waiting-text');
+                    if (textElem) textElem.innerText = "NUVEM VAZIA! RECARREGANDO...";
+                }
+                
+                setTimeout(() => {
+                    window.location.reload();
+                }, 1000);
+            })
+            .catch(err => {
+                console.error("Erro ao limpar banco:", err);
+                if (ov) {
+                    const textElem = ov.querySelector('.waiting-text');
+                    if (textElem) textElem.innerText = "ERRO AO LIMPAR. RECARREGANDO...";
+                }
+                setTimeout(() => {
+                    window.location.reload();
+                }, 1500);
+            });
         });
     };
 }
@@ -1730,11 +1730,11 @@ if (toolClear) {
 // 11. UTILITÁRIOS DE CÁLCULO E DESENHO
 function calculatePriceStep(range) {
     if (!range || range <= 0) return 0.25;
-
+    
     // Alvo de aproximadamente 15 a 20 ticks na tela para maior detalhamento
-    const targetTicks = 18;
+    const targetTicks = 18; 
     let step = range / targetTicks;
-
+    
     // Se o passo calculado for próximo de 0.25, força o 0.25
     if (step <= 0.40) return 0.25;
     if (step <= 0.80) return 0.50;
@@ -1742,12 +1742,12 @@ function calculatePriceStep(range) {
 
     const magnitude = Math.pow(10, Math.floor(Math.log10(step)));
     const res = step / magnitude;
-
+    
     if (res > 5) step = 10 * magnitude;
     else if (res > 2) step = 5 * magnitude;
     else if (res > 1) step = 2 * magnitude;
     else step = magnitude;
-
+    
     return Math.max(0.25, step);
 }
 
@@ -1787,10 +1787,10 @@ function checkShortcut(event, shortcutStr) {
     const needsAlt = parts.includes('Alt');
     const needsShift = parts.includes('Shift');
 
-    return event.code === triggerKey &&
-        event.ctrlKey === needsCtrl &&
-        event.altKey === needsAlt &&
-        event.shiftKey === needsShift;
+    return event.code === triggerKey && 
+           event.ctrlKey === needsCtrl && 
+           event.altKey === needsAlt && 
+           event.shiftKey === needsShift;
 }
 
 window.addEventListener('keydown', (e) => {
@@ -1836,41 +1836,41 @@ function initShortcutRecording() {
     const inputs = document.querySelectorAll('.shortcut-input');
     inputs.forEach(input => {
         const keyId = input.id.replace('shortcut-', '');
-        const currentCombo = shortcuts[keyId === 'hand' ? 'hand' :
-            keyId === 'cross' ? 'cross' :
-                keyId === 'zoom-in' ? 'zoomIn' :
-                    keyId === 'zoom-out' ? 'zoomOut' :
-                        keyId === 'motor' ? 'motor' :
-                            keyId === 'shutdown' ? 'shutdown' : 'reset'];
-
+        const currentCombo = shortcuts[keyId === 'hand' ? 'hand' : 
+                                       keyId === 'cross' ? 'cross' : 
+                                       keyId === 'zoom-in' ? 'zoomIn' : 
+                                       keyId === 'zoom-out' ? 'zoomOut' : 
+                                       keyId === 'motor' ? 'motor' :
+                                       keyId === 'shutdown' ? 'shutdown' : 'reset'];
+        
         input.value = currentCombo ? currentCombo.replace(/Key|Digit/g, '').replace('Equal', '+').replace('Minus', '-') : "---";
 
         input.onclick = () => {
             if (input.classList.contains('recording')) return;
             input.classList.add('recording');
             input.value = "Pressione a combinação...";
-
+            
             const captureKey = (e) => {
                 // Não grava se for APENAS uma tecla modificadora sozinha
                 if (['Control', 'Alt', 'Shift', 'Meta'].includes(e.key)) return;
-
+                
                 e.preventDefault();
                 e.stopPropagation();
-
+                
                 let combo = "";
                 if (e.ctrlKey) combo += "Ctrl+";
                 if (e.altKey) combo += "Alt+";
                 if (e.shiftKey) combo += "Shift+";
                 combo += e.code;
-
+                
                 const tool = input.id.replace('shortcut-', '');
-                const settingsKey = tool === 'hand' ? 'hand' : tool === 'cross' ? 'cross' :
-                    tool === 'zoom-in' ? 'zoomIn' : tool === 'zoom-out' ? 'zoomOut' :
-                        tool === 'motor' ? 'motor' : tool === 'shutdown' ? 'shutdown' : 'reset';
-
+                const settingsKey = tool === 'hand' ? 'hand' : tool === 'cross' ? 'cross' : 
+                                    tool === 'zoom-in' ? 'zoomIn' : tool === 'zoom-out' ? 'zoomOut' : 
+                                    tool === 'motor' ? 'motor' : tool === 'shutdown' ? 'shutdown' : 'reset';
+                
                 shortcuts[settingsKey] = combo;
                 input.value = combo.replace(/Key|Digit/g, '').replace('Equal', '+').replace('Minus', '-');
-
+                
                 localStorage.setItem('zenith_shortcuts', JSON.stringify(shortcuts));
                 saveSettingsToServer();
                 input.classList.remove('recording');

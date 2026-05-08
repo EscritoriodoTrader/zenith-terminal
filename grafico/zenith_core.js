@@ -176,6 +176,7 @@ let needsHistoryRedraw = true;
 let externalLastPrice = 0;
 let needsScaleRedraw = true; // Flag para réguas
 let needsAutoScale = true; // Flag para escala controlada
+let lastPriceRange = null; // Cache da última faixa de preço (para detectar scroll puro)
 let shortcuts = JSON.parse(localStorage.getItem('zenith_shortcuts')) || {
     hand: 'KeyH',
     cross: 'KeyC',
@@ -767,9 +768,10 @@ function drawSingleCandle(targetCtx, c, i, range, cW, tickH) {
     }
 }
 
-// THROTTLING PARA PERFORMANCE - Limita redraw a ~10 vezes por segundo em vez de 60
+// THROTTLING PARA PERFORMANCE - Limita redraw baseado no tipo de movimento
 let lastDragUpdate = 0;
-const THROTTLE_DELAY = 50; // ms (reduz de 60fps para ~20fps durante arrasto)
+const THROTTLE_DELAY_ZOOM = 50;        // ms: Zoom vertical (precisa ser mais rápido)
+const THROTTLE_DELAY_SCROLL = 100;     // ms: Scroll horizontal puro (pode ser mais lento)
 
 // 8. INTERATIVIDADE E UI
 canvas.onwheel = (e) => {
@@ -815,15 +817,20 @@ canvas.onmousemove = (e) => {
         const now = Date.now();
         const timeSinceLastUpdate = now - lastDragUpdate;
         
-        // THROTTLE: Só atualiza desenho a cada THROTTLE_DELAY ms
-        if (timeSinceLastUpdate < THROTTLE_DELAY) {
+        const dX = e.clientX - lX;
+        const dY = e.clientY - lY;
+        
+        // Detectar tipo de movimento ANTES de atualizar posições
+        const isHorizontalScrollOnly = Math.abs(dY) < 2 && (lastPriceRange === null || Math.abs(dY) < 1);
+        
+        // THROTTLE DINÂMICO: Mais agressivo para scroll horizontal puro
+        const throttleDelay = isHorizontalScrollOnly ? THROTTLE_DELAY_SCROLL : THROTTLE_DELAY_ZOOM;
+        
+        if (timeSinceLastUpdate < throttleDelay) {
             return; // Atualiza mousePos, mas não redesenha canvas
         }
         
         lastDragUpdate = now;
-        
-        const dX = e.clientX - lX;
-        const dY = e.clientY - lY;
         lX = e.clientX;
         lY = e.clientY;
         
@@ -838,8 +845,10 @@ canvas.onmousemove = (e) => {
         priceMax += priceDelta;
         priceMin += priceDelta;
         
+        // Sempre marca para renderizar (a otimização é via throttle dinâmico)
         needsHistoryRedraw = true;
         needsScaleRedraw = true;
+        lastPriceRange = r; // Cache para próxima detecção
         draw();
     }
 };
@@ -850,6 +859,7 @@ canvas.onmousedown = (e) => {
         isDrag = true;
         lX = e.clientX;
         lY = e.clientY;
+        lastPriceRange = priceMax - priceMin; // Reset para nova detecção de scroll
         canvas.style.cursor = 'grabbing';
     }
 };

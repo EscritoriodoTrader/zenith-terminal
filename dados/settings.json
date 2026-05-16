@@ -1,6 +1,6 @@
 {
-    "chartBgColor": "#525252",
-    "themeColor": "#070a11",
+    "chartBgColor": "#243241",
+    "themeColor": "#333333",
     "posColor": "#2786a5",
     "negColor": "#a84f4f",
     "currentTimeframe": "1Min",
@@ -33,5 +33,14 @@
     "posOutlineColor": "#ffffff",
     "negOutlineColor": "#000000",
     "lastPriceBgColor": "#ff9800",
-    "lastPriceLineColor": "#ff9800"
+    "lastPriceLineColor": "#ff9800",
+    "shortcuts": {
+        "hand": "KeyH",
+        "cross": "KeyC",
+        "zoomIn": "Equal",
+        "zoomOut": "Minus",
+        "reset": "Delete",
+        "motor": "Alt+KeyP",
+        "shutdown": "KeyX"
+    }
 }

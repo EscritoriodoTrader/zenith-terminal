@@ -21,7 +21,7 @@
   - Regra de Ouro: O sufixo '_seq' permite que múltiplos trades idênticos no mesmo milissegundo sejam somados individualmente, garantindo paridade total de volume.
 
 ========================================================================
-2. MOTOR DE RESILIÊNCIA (PYTHON: scanner.py)
+2. MOTOR DE RESILIÊNCIA (PYTHON: Market-Data.py)
 ========================================================================
 
 * BLINDAGEM: Envolvido em um loop de auto-recuperação global. 
@@ -37,7 +37,7 @@
 * LIMPEZA: O histórico do banco só é apagado via comando manual no botão de Reset (Lixeira).
 
 ========================================================================
-4. FRONTEND PERSISTENTE (JS: zenith_core.js v8.1)
+4. FRONTEND PERSISTENTE (JS: script.js v8.9.4)
 ========================================================================
 
 * FILOSOFIA ZERO DATA LOSS: O gráfico não apaga a memória local ao receber histórico. Ele mescla o banco com o tempo real.
@@ -50,6 +50,6 @@
 ========================================================================
 5. INFRAESTRUTURA
 ========================================================================
-* LOCALHOST: Porta 10000 (Ambiente de desenvolvimento e laboratório).
+* LOCALHOST: Porta 3000 (Ambiente de desenvolvimento e laboratório).
 * RENDER: zenith-terminal-bvj4.onrender.com (Ambiente de produção em nuvem).
 * DATABASE: PostgreSQL (Supabase) - Onde o passado é imortalizado.

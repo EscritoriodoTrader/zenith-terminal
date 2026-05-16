@@ -1,4 +1,5 @@
-require('dotenv').config();
+const path = require('path');
+require('dotenv').config({ path: path.join(__dirname, '.env') });
 const { Pool } = require('pg');
 
 // Configuração do Pool de Conexão com o PostgreSQL (Supabase)
@@ -22,10 +23,11 @@ async function initDatabase() {
         console.log("[DB]: Verificando tabelas no PostgreSQL...");
         
         // Criar tabela de trades se não existir
-        // Usamos BIGINT para timestamp e DOUBLE PRECISION para preços
+        // O ID é TEXT pois usamos uma combinação de dados para gerar um UID único
         await client.query(`
             CREATE TABLE IF NOT EXISTS trades (
                 id TEXT PRIMARY KEY,
+                asset TEXT,
                 timestamp BIGINT,
                 price DOUBLE PRECISION,
                 quantity INTEGER,
@@ -33,12 +35,39 @@ async function initDatabase() {
             )
         `);
 
+        // Correção de Tipo: Se a coluna 'id' existir mas for inteira, converter para TEXT
+        // Isso resolve o erro: "column id is of type integer but expression is of type text"
+        await client.query(`
+            DO $$ 
+            BEGIN 
+                IF EXISTS (
+                    SELECT 1 FROM information_schema.columns 
+                    WHERE table_name = 'trades' AND column_name = 'id' AND data_type = 'integer'
+                ) THEN 
+                    ALTER TABLE trades ALTER COLUMN id TYPE TEXT;
+                END IF;
+            END $$;
+        `);
+
+        // Adicionar coluna 'asset' se não existir (Migração para Multi-Ativo)
+        await client.query(`
+            DO $$ 
+            BEGIN 
+                IF NOT EXISTS (
+                    SELECT 1 FROM information_schema.columns 
+                    WHERE table_name = 'trades' AND column_name = 'asset'
+                ) THEN 
+                    ALTER TABLE trades ADD COLUMN asset TEXT;
+                END IF;
+            END $$;
+        `);
+
         // Índice para acelerar a busca por tempo
         await client.query(`
             CREATE INDEX IF NOT EXISTS idx_trades_timestamp ON trades (timestamp ASC)
         `);
 
-        console.log("[DB]: Banco de dados na nuvem inicializado com sucesso.");
+        console.log("[DB]: Banco de dados na nuvem sincronizado com o motor.");
     } catch (err) {
         console.error("[DB ERROR]: Falha ao inicializar banco:", err.message);
         throw err;
@@ -69,24 +98,24 @@ async function clearDatabase() {
  * Insere um lote de trades no banco usando UNNEST para máxima performance
  * @param {Array} trades 
  */
-async function insertTrades(trades) {
+async function insertTrades(trades, assetName = 'DESCONHECIDO') {
     if (!trades || trades.length === 0) return;
 
     try {
-        // Técnica de UNNEST é muito mais rápida para inserções em massa no Postgres
         const ids = trades.map(t => t.id);
+        const assets = trades.map(t => t.asset || assetName); // Usa o do objeto ou o global do lote
         const timestamps = trades.map(t => t.timestamp);
         const prices = trades.map(t => t.price);
         const quantities = trades.map(t => t.quantity);
         const sides = trades.map(t => t.side);
 
         const query = `
-            INSERT INTO trades (id, timestamp, price, quantity, side)
-            SELECT * FROM UNNEST($1::text[], $2::bigint[], $3::float8[], $4::int[], $5::text[])
+            INSERT INTO trades (id, asset, timestamp, price, quantity, side)
+            SELECT * FROM UNNEST($1::text[], $2::text[], $3::bigint[], $4::float8[], $5::int[], $6::text[])
             ON CONFLICT (id) DO NOTHING
         `;
 
-        await pool.query(query, [ids, timestamps, prices, quantities, sides]);
+        await pool.query(query, [ids, assets, timestamps, prices, quantities, sides]);
     } catch (err) {
         console.error("[DB ERROR]: Erro na inserção em massa:", err.message);
     }

@@ -1,0 +1,76 @@
+Times de outro Ativo
+
+Nome = nome do ativo
+Formula = =RTD("RTDTrading.RTDServer";; "T&T1"; "INFO"; "ATV")
+
+Ordem = ordem negócio ou original
+Formula = =RTD("RTDTrading.RTDServer";; "T&T1"; "INFO"; "TAB")
+
+Data = Horário
+Formula (VAI ATÉ 499) = =RTD("RTDTrading.RTDServer";; "T&T1"; "DAT"; 0)
+
+Valor = Preço
+Formula (VAI ATÉ 499) = =RTD("RTDTrading.RTDServer";; "T&T1"; "PRE"; 0)
+
+Quantidade = Quantidade
+Formula (VAI ATÉ 499) =	=RTD("RTDTrading.RTDServer";; "T&T1"; "QUL"; 0)
+
+Agregação = Agregação
+Formula (VAI ATÉ 499) =	=RTD("RTDTrading.RTDServer";; "T&T1"; "AGR"; 0)
+
+
+
+
+
+Times de 1 ativo
+
+Nome = nome do ativo
+Formula = =RTD("RTDTrading.RTDServer";; "T&T0"; "INFO"; "ATV")	
+
+Ordem = ordem negócio ou original
+Formula = =RTD("RTDTrading.RTDServer";; "T&T0"; "INFO"; "TAB")
+
+Data = Horário
+Formula (VAI ATÉ 499) = =RTD("RTDTrading.RTDServer";; "T&T0"; "DAT"; 0)
+
+Valor = Preço
+Formula (VAI ATÉ 499) = =RTD("RTDTrading.RTDServer";; "T&T0"; "PRE"; 0)
+
+Quantidade = Quantidade
+Formula (VAI ATÉ 499) =	=RTD("RTDTrading.RTDServer";; "T&T0"; "QUL"; 0)
+
+Agregação = Agregação
+Formula (VAI ATÉ 499) =	=RTD("RTDTrading.RTDServer";; "T&T0"; "AGR"; 0)
+
+
+
+
+Informativos
+
+Ativo 1 - ESM6
+
+Data = =RTD("RTDTrading.RTDServer";; "ESM6_M_0"; "DAT")
+Último Preço = =RTD("RTDTrading.RTDServer";; "ESM6_M_0"; "ULT")
+Abertura = =RTD("RTDTrading.RTDServer";; "ESM6_M_0"; "ABE")
+Máximo = =RTD("RTDTrading.RTDServer";; "ESM6_M_0"; "MAX")
+Mínimo = =RTD("RTDTrading.RTDServer";; "ESM6_M_0"; "MIN")
+Fechamento = =RTD("RTDTrading.RTDServer";; "ESM6_M_0"; "FEC")
+Variação = =RTD("RTDTrading.RTDServer";; "ESM6_M_0"; "VAR")
+Aj. Anterior = =RTD("RTDTrading.RTDServer";; "ESM6_M_0"; "AJA")
+TR - Volume de Agressão - Saldo = =RTD("RTDTrading.RTDServer";; "ESM6_M_0"; "100")
+VWAP = =RTD("RTDTrading.RTDServer";; "ESM6_M_0"; "67")
+
+
+Ativo 2 - NQM6
+
+Data = =RTD("RTDTrading.RTDServer";; "NQM6_M_0"; "DAT")
+Último Preço = =RTD("RTDTrading.RTDServer";; "NQM6_M_0"; "ULT")
+Abertura = =RTD("RTDTrading.RTDServer";; "NQM6_M_0"; "ABE")
+Máximo = =RTD("RTDTrading.RTDServer";; "NQM6_M_0"; "MAX")
+Mínimo = =RTD("RTDTrading.RTDServer";; "NQM6_M_0"; "MIN")
+Fechamento = =RTD("RTDTrading.RTDServer";; "NQM6_M_0"; "FEC")
+Variação = =RTD("RTDTrading.RTDServer";; "NQM6_M_0"; "VAR")
+Aj. Anterior = =RTD("RTDTrading.RTDServer";; "NQM6_M_0"; "AJA")
+TR - Volume de Agressão - Saldo = =RTD("RTDTrading.RTDServer";; "NQM6_M_0"; "100")
+VWAP = =RTD("RTDTrading.RTDServer";; "NQM6_M_0"; "67")
+

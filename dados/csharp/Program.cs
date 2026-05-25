@@ -292,11 +292,13 @@ namespace MarketDataRTD
                             }
                             else if (tradesCount < lastTradesCount && tradesCount > 0)
                             {
-                                // Novo dia ou reset no ProfitChart
-                                newTradesCount = tradesCount;
-                                if (newTradesCount > MAX_LINES) newTradesCount = MAX_LINES;
-                                lastTradesCount = tradesCount;
-                                lastDat0 = currentDat0;
+                                // NEG voltou para trás — RTD heartbeat enviou valor antigo do cache.
+                                // ESTRATÉGIA: ignorar completamente. Manter o high-water mark (lastTradesCount).
+                                // Quando o NEG genuíno avançar além do high-water mark, será processado normalmente.
+                                // NÃO atualizar lastTradesCount nem lastDat0.
+                                string msgRewind = string.Format("[AVISO] NEG voltou de {0} para {1}. Ignorando (cache RTD). Mantendo baseline em {0}.", lastTradesCount, tradesCount);
+                                Console.WriteLine(msgRewind);
+                                try { System.IO.File.AppendAllText(@"c:\FOOTPRINT\dados\logs\rtd_audit.log", DateTime.Now.ToString("HH:mm:ss.fff") + " - " + msgRewind + Environment.NewLine); } catch { }
                             }
                         }
 

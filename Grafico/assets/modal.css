@@ -1,0 +1,232 @@
+/* ============================================================
+   MODAL DE BUSCA (LUPA) - Estilo Idêntico à BlackArrow
+   ============================================================ */
+
+#modal-search {
+    position: fixed;
+    top: 0; left: 0; right: 0; bottom: 0;
+    background: var(--bg-overlay, rgba(14, 14, 14, 0.82));
+    z-index: var(--z-modal, 200);
+    display: flex;
+    justify-content: center;
+    align-items: center;
+}
+
+#modal-search.hidden {
+    display: none !important;
+}
+
+.tickerform-component {
+    width: 715px;
+    height: 409px;
+    background: rgba(26, 26, 26, 0.95);
+    border: 1px solid var(--grey-33);
+    border-radius: 3px;
+    display: flex;
+    flex-direction: column;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.5);
+    font-family: var(--font-family);
+    overflow: hidden;
+}
+
+/* HEADER DO MODAL */
+.tickerform-component-header {
+    background: var(--grey-22);
+    border-bottom: 1px solid var(--grey-33);
+    padding-bottom: 8px;
+}
+
+/* 1. Titlebar */
+.tickerform-component-header-titlebar {
+    display: flex;
+    align-items: center;
+    height: 30px;
+    background: var(--grey-33);
+    padding: 0 12px;
+    font-size: 11px;
+    color: var(--grey-e6);
+}
+
+.tickerform-component-header-titlebar-icon {
+    margin-right: 8px;
+    display: flex;
+    align-items: center;
+}
+
+.tickerform-component-header-titlebar-title {
+    flex: 1;
+    font-weight: 600;
+}
+
+.tickerform-component-header-titlebar-close-btn {
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 24px;
+    height: 24px;
+    border-radius: 2px;
+}
+.tickerform-component-header-titlebar-close-btn:hover {
+    background: #ff081e; /* Padrão Nelogica para fechar */
+}
+
+/* 2. Searchbar */
+.tickerform-component-header-searchbar {
+    display: flex;
+    align-items: center;
+    padding: 12px 16px 8px 16px;
+    gap: 8px;
+}
+
+.tickerform-component-header-searchbar-icon {
+    display: flex;
+    align-items: center;
+}
+
+.tickerform-component-header-searchbar-input-text {
+    flex: 1;
+    position: relative;
+}
+
+.tickerform-component-header-searchbar-input {
+    width: 100%;
+    background: var(--grey-0a);
+    border: 1px solid var(--grey-1b);
+    border-radius: 2px;
+    color: var(--grey-da);
+    padding: 6px 8px;
+    font-size: 12px;
+    outline: none;
+}
+.tickerform-component-header-searchbar-input:focus {
+    border-color: var(--grey-70);
+}
+
+.select-multiple__wrapper {
+    display: flex;
+    align-items: center;
+    background: var(--grey-19);
+    border: 1px solid var(--grey-33);
+    border-radius: 2px;
+    padding: 4px 8px;
+    font-size: 11px;
+    color: var(--grey-cc);
+    cursor: pointer;
+    min-width: 120px;
+}
+.select-multiple__wrapper svg { margin-right: 6px; }
+
+/* 3. Filtros (Buttons) */
+.tickerform-component-header-buttons {
+    display: flex;
+    gap: 4px;
+    padding: 0 16px;
+    margin-bottom: 8px;
+}
+
+.tickerform-component-header-buttons--filter {
+    background: transparent;
+    border: 1px solid transparent;
+    color: var(--grey-9f);
+    padding: 4px 8px;
+    font-size: 11px;
+    cursor: pointer;
+    border-radius: 2px;
+}
+
+.tickerform-component-header-buttons--filter:hover {
+    background: var(--grey-33);
+    color: var(--light);
+}
+
+.tickerform-component-header-buttons--filter.selected {
+    background: var(--grey-33);
+    color: var(--light);
+    border-color: var(--grey-4a);
+}
+
+/* 4. Cabeçalho das Colunas */
+.tickerform-component-header-column-names {
+    display: grid;
+    grid-template-columns: 120px 2fr 80px 80px 80px;
+    padding: 4px 16px;
+    font-size: 10px;
+    color: var(--grey-80);
+    text-transform: uppercase;
+    font-weight: 600;
+}
+
+/* LISTA DE RESULTADOS */
+.tickerform-component-results {
+    flex: 1;
+    overflow-y: auto;
+    list-style: none;
+    padding: 0;
+    margin: 0;
+}
+
+.tickerform-component-results-ticker {
+    display: grid;
+    grid-template-columns: 120px 2fr 80px 80px 80px;
+    padding: 0 16px;
+    height: 25px;
+    align-items: center;
+    font-size: 11px;
+    cursor: pointer;
+    color: var(--grey-cc);
+    border-bottom: 1px solid rgba(255,255,255,0.02);
+}
+
+.tickerform-component-results-ticker:hover {
+    background: var(--grey-33);
+    color: var(--light);
+}
+
+.tickerform-component-results-ticker:nth-child(even) {
+    background: rgba(255,255,255, 0.015);
+}
+.tickerform-component-results-ticker:nth-child(even):hover {
+    background: var(--grey-33);
+}
+
+.tickerform-component-results-ticker__name {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-weight: 600;
+    color: var(--light);
+}
+
+.tickerform-component-results-ticker__name-icon {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.tickerform-component-results-ticker__description {
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    color: var(--grey-9f);
+}
+
+.tickerform-component-results-ticker__exchange {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+}
+
+.tickerform-component-results-ticker__close,
+.tickerform-component-results-ticker__variation {
+    text-align: right;
+    padding-right: 8px;
+    font-variant-numeric: tabular-nums;
+}
+
+.text-accent {
+    color: var(--blue-primary);
+    background: rgba(39, 153, 250, 0.1);
+    padding: 0 2px;
+    border-radius: 2px;
+}

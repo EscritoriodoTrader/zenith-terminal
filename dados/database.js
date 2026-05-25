@@ -139,13 +139,63 @@ async function getTrades() {
 /**
  * Busca o maior timestamp já salvo no banco para sincronização rápida do histórico
  */
-async function getLastTimestamp() {
+async function getLastTimestamp(asset) {
     try {
-        const res = await pool.query("SELECT MAX(timestamp) as last_ts FROM trades");
+        let query = "SELECT MAX(timestamp) as last_ts FROM trades";
+        let params = [];
+        if (asset) {
+            const upperAsset = String(asset).toUpperCase().trim();
+            if (upperAsset.startsWith("WIN") || upperAsset.startsWith("IND")) {
+                query = "SELECT MAX(timestamp) as last_ts FROM trades WHERE asset LIKE 'WIN%' OR asset LIKE 'IND%'";
+            } else if (upperAsset.startsWith("WDO") || upperAsset.startsWith("DOL")) {
+                query = "SELECT MAX(timestamp) as last_ts FROM trades WHERE asset LIKE 'WDO%' OR asset LIKE 'DOL%'";
+            } else if (upperAsset.includes("NQ")) {
+                query = "SELECT MAX(timestamp) as last_ts FROM trades WHERE asset LIKE '%NQ%'";
+            } else if (upperAsset.includes("ES")) {
+                query = "SELECT MAX(timestamp) as last_ts FROM trades WHERE asset LIKE '%ES%'";
+            } else {
+                query = "SELECT MAX(timestamp) as last_ts FROM trades WHERE asset = $1";
+                params = [upperAsset];
+            }
+        }
+        const res = await pool.query(query, params);
         return res.rows[0]?.last_ts || 0;
     } catch (err) {
         console.error("[DB ERROR]: Erro ao buscar último timestamp:", err);
         return 0;
+    }
+}
+
+/**
+ * Recupera trades de um ativo específico ordenados por tempo sem limite
+ */
+async function getTradesForAsset(asset) {
+    try {
+        let query = "SELECT * FROM trades WHERE asset = $1 ORDER BY timestamp ASC";
+        let params = [asset];
+
+        if (asset) {
+            const upperAsset = String(asset).toUpperCase().trim();
+            if (upperAsset.startsWith("WIN") || upperAsset.startsWith("IND")) {
+                query = "SELECT * FROM trades WHERE asset LIKE 'WIN%' OR asset LIKE 'IND%' ORDER BY timestamp ASC";
+                params = [];
+            } else if (upperAsset.startsWith("WDO") || upperAsset.startsWith("DOL")) {
+                query = "SELECT * FROM trades WHERE asset LIKE 'WDO%' OR asset LIKE 'DOL%' ORDER BY timestamp ASC";
+                params = [];
+            } else if (upperAsset.includes("NQ")) {
+                query = "SELECT * FROM trades WHERE asset LIKE '%NQ%' ORDER BY timestamp ASC";
+                params = [];
+            } else if (upperAsset.includes("ES")) {
+                query = "SELECT * FROM trades WHERE asset LIKE '%ES%' ORDER BY timestamp ASC";
+                params = [];
+            }
+        }
+
+        const res = await pool.query(query, params);
+        return res.rows;
+    } catch (err) {
+        console.error(`[DB ERROR]: Erro ao buscar trades para ${asset}:`, err);
+        return [];
     }
 }
 
@@ -165,4 +215,42 @@ async function getTradesAfter(timestamp) {
     }
 }
 
-module.exports = { initDatabase, clearDatabase, insertTrades, getTrades, getLastTimestamp, getTradesAfter };
+/**
+ * Remove os trades de um ativo com timestamp menor ou igual ao informado
+ */
+async function deleteTradesBefore(asset, timestamp) {
+    let client;
+    try {
+        client = await pool.connect();
+        let query = "DELETE FROM trades WHERE asset = $1 AND timestamp <= $2";
+        let params = [asset, timestamp];
+
+        if (asset) {
+            const upperAsset = String(asset).toUpperCase().trim();
+            if (upperAsset.startsWith("WIN") || upperAsset.startsWith("IND")) {
+                query = "DELETE FROM trades WHERE (asset LIKE 'WIN%' OR asset LIKE 'IND%') AND timestamp <= $1";
+                params = [timestamp];
+            } else if (upperAsset.startsWith("WDO") || upperAsset.startsWith("DOL")) {
+                query = "DELETE FROM trades WHERE (asset LIKE 'WDO%' OR asset LIKE 'DOL%') AND timestamp <= $1";
+                params = [timestamp];
+            } else if (upperAsset.includes("NQ")) {
+                query = "DELETE FROM trades WHERE asset LIKE '%NQ%' AND timestamp <= $1";
+                params = [timestamp];
+            } else if (upperAsset.includes("ES")) {
+                query = "DELETE FROM trades WHERE asset LIKE '%ES%' AND timestamp <= $1";
+                params = [timestamp];
+            }
+        }
+
+        const res = await client.query(query, params);
+        console.log(`[DB]: Limpeza de sobreposição para ${asset} concluída. Linhas removidas: ${res.rowCount}`);
+        return res.rowCount;
+    } catch (err) {
+        console.error(`[DB ERROR]: Erro ao limpar sobreposição para ${asset}:`, err.message);
+        return 0;
+    } finally {
+        if (client) client.release();
+    }
+}
+
+module.exports = { initDatabase, clearDatabase, insertTrades, getTrades, getLastTimestamp, getTradesAfter, getTradesForAsset, deleteTradesBefore };

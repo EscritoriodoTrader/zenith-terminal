@@ -1,0 +1,32 @@
+/* ============================================================
+   ZENITH GRAFICO — FONTES
+   Mesmo padrão da BlackArrow: Segoe UI como fonte principal
+   Arquivos TTF já presentes em assets/
+   ============================================================ */
+
+/* Segoe UI SemiLight — peso 300/400 (texto normal) */
+@font-face {
+    font-family: 'Segoe UI';
+    font-style:  normal;
+    font-weight: 400;
+    src: url('./SEGOEUISL-Cf5d3PPb.TTF') format('truetype');
+    font-display: block;
+}
+
+/* Segoe UI Bold — peso 700 (destaques, headers) */
+@font-face {
+    font-family: 'Segoe UI';
+    font-style:  normal;
+    font-weight: 700;
+    src: url('./SEGOEUIB-DczJKTk6.TTF') format('truetype');
+    font-display: block;
+}
+
+/* text-security-disc — máscara de senha (mantido por compatibilidade) */
+@font-face {
+    font-family: 'text-security-disc';
+    font-style:  normal;
+    font-weight: 400;
+    src: url('./text-security-disc (2).woff') format('woff');
+    font-display: block;
+}

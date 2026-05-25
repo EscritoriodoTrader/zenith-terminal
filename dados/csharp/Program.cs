@@ -116,24 +116,6 @@ namespace MarketDataRTD
                     topicMap[tid] = "AGR_" + iStr; tid++;
                 }
 
-                // >>> FORÇAR ASSINATURA DE NEG, ULT E VAR DIRETAMENTE NA INICIALIZAÇÃO <<<
-                string fixedTicker = "WINFUT_F_0";
-                
-                object[] arrUlt = new object[] { fixedTicker, "ULT" };
-                object[] arrVar = new object[] { fixedTicker, "VAR" };
-                object[] arrNeg = new object[] { fixedTicker, "NEG" };
-                
-                try { rtdServer.ConnectData(tid, arrUlt, ref newValues); } catch (Exception e) { Console.WriteLine("Erro ULT: " + e.Message); }
-                topicMap[tid] = "ULT"; tid++;
-                
-                try { rtdServer.ConnectData(tid, arrVar, ref newValues); } catch (Exception e) { Console.WriteLine("Erro VAR: " + e.Message); }
-                topicMap[tid] = "VAR"; tid++;
-                
-                try { rtdServer.ConnectData(tid, arrNeg, ref newValues); } catch (Exception e) { Console.WriteLine("Erro NEG: " + e.Message); }
-                topicMap[tid] = "NEG"; tid++;
-                
-                Console.WriteLine("[C# NATIVO] Assinaturas ULT/VAR/NEG enviadas para " + fixedTicker);
-
                 Console.WriteLine("[C# NATIVO] " + (tid - 10000) + " topicos assinados no Profit.");
 
                 // Primeira leitura forcada (igual ao _force_refresh do Python)
@@ -163,20 +145,15 @@ namespace MarketDataRTD
             // Cache de todos os valores do T&T1
             Dictionary<string, string> cache = new Dictionary<string, string>();
 
-            // Contador anterior de negócios para cálculo do diferencial
-            int lastTradesCount = -1;
-
-            // Guarda o último DAT_0 lido: só processa novos trades quando
-            // AMBOS NEG avançou E a grid atualizou (DAT_0 mudou).
-            // Isso evita ler dados antigos quando o NEG chega antes da grid.
-            string lastDat0 = "";
+            // Estado anterior da tabela para o cálculo de deslizamento
+            string[] lastTableState = new string[MAX_LINES];
 
             HttpClient http = new HttpClient();
             http.Timeout = TimeSpan.FromSeconds(2);
             JavaScriptSerializer json = new JavaScriptSerializer();
 
             string assetName = "WINFUT";
-
+            bool assetSubscribed = false;
 
             int totalReads = 0;
             long lastPrint = Environment.TickCount;
@@ -187,17 +164,6 @@ namespace MarketDataRTD
             {
                 // Pump de mensagens Windows — essencial para COM STA
                 System.Windows.Forms.Application.DoEvents();
-
-                // === AGUARDA A CAMPANHIA DO PROFIT ===
-                // Só chama RefreshData após o Profit tocar UpdateNotify().
-                // Isso GARANTE que todos os tópicos do batch estão prontos
-                // e consistentes (NEG + grid sincronizados).
-                if (!callback.HasUpdates)
-                {
-                    Thread.Sleep(1); // aguarda sem consumir CPU
-                    continue;
-                }
-                callback.HasUpdates = false; // reset antes de ler
 
                 try
                 {
@@ -218,102 +184,123 @@ namespace MarketDataRTD
                             string val  = Convert.ToString(result[1, i]);
                             cache[name] = val;
 
-                            // Apenas loga o ativo detectado (sem re-assinar).
-                            // ULT/VAR/NEG já foram assinados permanentemente no Main().
-                            // Re-assinar aqui cria um 2º tópico escrevendo em cache["NEG"],
-                            // fazendo o NEG "voltar para trás" → duplicatas.
+                            // Detecta o ativo e assina ULT/VAR se ainda não fez
                             if (name == "ASSET_NAME" && !string.IsNullOrWhiteSpace(val) && val != "---")
                             {
                                 if (val != assetName)
                                 {
                                     assetName = val;
+                                    assetSubscribed = false;
                                     Console.WriteLine("[C# NATIVO] Ativo detectado: " + assetName);
                                 }
-                            }
-                        }
 
-                        // === PASSO 2: Descobre a quantidade de trades novos pelo diferencial do NEG ===
-                        int tradesCount = 0;
-                        if (cache.ContainsKey("NEG"))
-                        {
-                            int.TryParse(cache["NEG"].Replace(".", "").Replace(",", ""), out tradesCount);
-                        }
-
-                        // Captura o DAT_0 atual (timestamp do trade mais novo na grid)
-                        string currentDat0 = cache.ContainsKey("DAT_0") ? cache["DAT_0"] : "";
-
-                        int newTradesCount = 0;
-                        if (lastTradesCount == -1)
-                        {
-                            // Primeira leitura: tentar inferir visualmente quantos estão preenchidos
-                            for (int i = 0; i < MAX_LINES; i++)
-                            {
-                                string iStr = i.ToString();
-                                string dat = cache.ContainsKey("DAT_" + iStr) ? cache["DAT_" + iStr] : "";
-                                string pre = cache.ContainsKey("PRE_" + iStr) ? cache["PRE_" + iStr] : "";
-                                if (!string.IsNullOrWhiteSpace(dat) && dat != "---" && !dat.Contains("Inv") && !string.IsNullOrWhiteSpace(pre))
-                                    newTradesCount++;
-                                else
-                                    break;
-                            }
-                            if (tradesCount > 0) lastTradesCount = tradesCount;
-                            lastDat0 = currentDat0;
-
-                            string msgBase = string.Format("[CÁLCULO INICIAL] Leitura Base. Valor atual NEG: {0}. Trades carregados da tela: {1}", tradesCount, newTradesCount);
-                            Console.WriteLine(msgBase);
-                            try { System.IO.File.AppendAllText(@"c:\FOOTPRINT\dados\logs\rtd_audit.log", DateTime.Now.ToString("HH:mm:ss.fff") + " - " + msgBase + Environment.NewLine); } catch { }
-                        }
-                        else
-                        {
-                            if (tradesCount > lastTradesCount)
-                            {
-                                // SINCRONIZAÇÃO: só lê se a grid também atualizou (DAT_0 mudou).
-                                // Se NEG chegou antes da grid, aguarda o próximo tick.
-                                if (!string.IsNullOrEmpty(currentDat0) && currentDat0 == lastDat0)
+                                if (!assetSubscribed)
                                 {
-                                    // Grid ainda não atualizou. NEG acumulará e será lido quando DAT_0 mudar.
-                                }
-                                else
-                                {
-                                    newTradesCount = tradesCount - lastTradesCount;
-                                    string msgCalc = string.Format("[CÁLCULO] NEG Atual: {0} | NEG Anterior: {1} | DAT_0: {2} -> Lendo {3} novos trades na tela.", tradesCount, lastTradesCount, currentDat0, newTradesCount);
-                                    Console.WriteLine(msgCalc);
-                                    try { System.IO.File.AppendAllText(@"c:\FOOTPRINT\dados\logs\rtd_audit.log", DateTime.Now.ToString("HH:mm:ss.fff") + " - " + msgCalc + Environment.NewLine); } catch { }
-
-                                    if (newTradesCount > MAX_LINES)
-                                    {
-                                        newTradesCount = MAX_LINES;
-                                        Console.WriteLine("[C# NATIVO] Tsunami detectado via diferença de NEG!");
-                                        try { System.IO.File.AppendAllText(@"c:\FOOTPRINT\dados\logs\rtd_audit.log", DateTime.Now.ToString("HH:mm:ss.fff") + " - [C# NATIVO] Tsunami detectado via diferença de NEG!" + Environment.NewLine); } catch { }
-                                    }
-                                    lastTradesCount = tradesCount;
-                                    lastDat0 = currentDat0;
+                                    assetSubscribed = true;
+                                    bool nv = true;
+                                    int ultTid = (Environment.TickCount & int.MaxValue) % 10000000 + 500000;
+                                    int varTid = ultTid + 1;
+                                    int negTid = ultTid + 2;
+                                    try { rtd.ConnectData(ultTid, new object[] { assetName, "ULT" }, ref nv); } catch { }
+                                    topicMap[ultTid] = "ULT";
+                                    try { rtd.ConnectData(varTid, new object[] { assetName, "VAR" }, ref nv); } catch { }
+                                    topicMap[varTid] = "VAR";
+                                    try { rtd.ConnectData(negTid, new object[] { assetName, "NEG" }, ref nv); } catch { }
+                                    topicMap[negTid] = "NEG";
+                                    Console.WriteLine("[C# NATIVO] ULT/VAR/NEG assinados para " + assetName);
                                 }
                             }
-                            else if (tradesCount < lastTradesCount && tradesCount > 0)
-                            {
-                                // NEG voltou para trás — RTD heartbeat enviou valor antigo do cache.
-                                // ESTRATÉGIA: ignorar completamente. Manter o high-water mark (lastTradesCount).
-                                // Quando o NEG genuíno avançar além do high-water mark, será processado normalmente.
-                                // NÃO atualizar lastTradesCount nem lastDat0.
-                                string msgRewind = string.Format("[AVISO] NEG voltou de {0} para {1}. Ignorando (cache RTD). Mantendo baseline em {0}.", lastTradesCount, tradesCount);
-                                Console.WriteLine(msgRewind);
-                                try { System.IO.File.AppendAllText(@"c:\FOOTPRINT\dados\logs\rtd_audit.log", DateTime.Now.ToString("HH:mm:ss.fff") + " - " + msgRewind + Environment.NewLine); } catch { }
-                            }
                         }
 
-                        // Processa APENAS a quantidade de trades novos detectada pelo diferencial!
-                        List<object> newTrades = new List<object>();
-                        for (int i = 0; i < newTradesCount; i++)
+                        // === PASSO 2: Scan das 500 posições — encontra trades NOVOS ===
+                        // O RTD empurra do topo para baixo: posição 0 = mais recente
+                        // Pega a "fotografia" atual das 500 linhas
+                        string[] currentTableState = new string[MAX_LINES];
+                        for (int i = 0; i < MAX_LINES; i++)
                         {
                             string iStr = i.ToString();
                             string dat = cache.ContainsKey("DAT_" + iStr) ? cache["DAT_" + iStr] : "";
                             string pre = cache.ContainsKey("PRE_" + iStr) ? cache["PRE_" + iStr] : "";
                             string qul = cache.ContainsKey("QUL_" + iStr) ? cache["QUL_" + iStr] : "";
                             string agr = cache.ContainsKey("AGR_" + iStr) ? cache["AGR_" + iStr] : "";
-
-                            if (string.IsNullOrWhiteSpace(dat) || string.IsNullOrWhiteSpace(pre) || dat == "---") continue;
                             
+                            // Cria a linha
+                            if (string.IsNullOrWhiteSpace(dat) || dat == "---" || dat.Contains("Inv") || string.IsNullOrWhiteSpace(pre)) 
+                            {
+                                currentTableState[i] = "";
+                            }
+                            else
+                            {
+                                currentTableState[i] = dat + "|" + pre + "|" + qul + "|" + agr;
+                            }
+                        }
+
+                        // Algoritmo de Deslizamento (Sliding Window): 
+                        // Procura o ponto exato onde a tabela velha se encaixa na tabela nova
+                        int newTradesCount = 0;
+                        bool foundMatch = false; // Flag para saber se achamos a âncora
+
+                        if (!string.IsNullOrEmpty(lastTableState[0])) // Se não for a primeira rodada
+                        {
+                            for (int offset = 0; offset < MAX_LINES; offset++)
+                            {
+                                bool match = true;
+                                // Compara uma "âncora" de 10 linhas para ter certeza absoluta do encaixe
+                                int linesToCompare = Math.Min(10, MAX_LINES - offset);
+                                for (int k = 0; k < linesToCompare; k++)
+                                {
+                                    // Pula linhas vazias no meio do teste
+                                    if (string.IsNullOrEmpty(lastTableState[k]) || string.IsNullOrEmpty(currentTableState[offset + k])) continue;
+                                    
+                                    if (currentTableState[offset + k] != lastTableState[k])
+                                    {
+                                        match = false;
+                                        break;
+                                    }
+                                }
+                                
+                                if (match)
+                                {
+                                    newTradesCount = offset;
+                                    foundMatch = true;
+                                    break;
+                                }
+                            }
+
+                            // A MÁGICA PARA NÃO TRAVAR:
+                            // Se ele varreu as 500 posições e NÃO achou a âncora velha em nenhum lugar,
+                            // significa que o mercado foi tão violento (ou o replay estava tão rápido) 
+                            // que chegaram mais de 500 trades de uma vez e expulsaram a âncora da tabela.
+                            if (!foundMatch)
+                            {
+                                newTradesCount = MAX_LINES; // Pega todos os 500, pois a tabela inteira é nova
+                                Console.WriteLine("[C# NATIVO] Tsunami de trades detectado! Tabela totalmente renovada.");
+                            }
+                        }
+                        else
+                        {
+                            // Primeira vez lendo, processa apenas os que têm dados (geralmente os primeiros)
+                            for (int i = 0; i < MAX_LINES; i++)
+                            {
+                                if (!string.IsNullOrEmpty(currentTableState[i])) newTradesCount++;
+                                else break;
+                            }
+                        }
+
+                        // Processa APENAS a quantidade de trades novos detectada pelo offset!
+                        List<object> newTrades = new List<object>();
+                        for (int i = 0; i < newTradesCount; i++)
+                        {
+                            if (string.IsNullOrEmpty(currentTableState[i])) continue;
+                            
+                            string[] parts = currentTableState[i].Split('|');
+                            if (parts.Length < 4) continue;
+                            
+                            string dat = parts[0];
+                            string pre = parts[1];
+                            string qul = parts[2];
+                            string agr = parts[3];
+
                             // Determina lado (comprador/vendedor agressor)
                             string side = "UNKNOWN";
                             string agrU = agr.ToUpper();
@@ -336,22 +323,18 @@ namespace MarketDataRTD
                                 {
                                     DateTime now = DateTime.Now;
                                     DateTime fullDate = new DateTime(now.Year, now.Month, now.Day, parsedTime.Hour, parsedTime.Minute, parsedTime.Second, parsedTime.Millisecond);
+                                    // Se a hora do trade for 2 horas a mais que agora, provavelmente é do dia anterior (virada da noite)
                                     if (fullDate > now.AddHours(2)) fullDate = fullDate.AddDays(-1);
                                     unixMs = new DateTimeOffset(fullDate).ToUnixTimeMilliseconds();
                                 }
                             }
                             catch { }
 
+                            // Se a hora for inválida ou "-" o Profit bugou na linha, ignoramos para não dar erro no banco
                             if (unixMs == 0) continue;
 
                             globalTradeSeq++;
-                            // UID baseado na POSIÇÃO NEG do trade na bolsa (único e determinístico)
-                            // Trade na posição i do batch corresponde ao NEG = (tradesCount - i)
-                            // Isso garante unicidade real (dois trades idênticos em ms/preço/qty/lado
-                            // têm NEG diferentes) e deduplicação correta (mesmo trade relido = mesmo NEG).
-                            string uid = string.Format("{0}_neg{1}", assetName, tradesCount - i);
-
-
+                            string uid = string.Format("{0}_{1}_{2}_{3}_{4}_seq{5}", assetName, unixMs, price, qty, side, globalTradeSeq);
 
                             var trade = new Dictionary<string, object>();
                             trade["id"]        = uid;
@@ -361,6 +344,12 @@ namespace MarketDataRTD
                             trade["side"]      = side;
                             trade["asset"]     = assetName;
                             newTrades.Add(trade);
+                        }
+
+                        // Salva o estado atual para ser a referência na próxima leitura
+                        if (newTradesCount > 0)
+                        {
+                            Array.Copy(currentTableState, lastTableState, MAX_LINES);
                         }
 
                         // === PASSO 3: Envia os trades novos em UM único POST ===
@@ -376,15 +365,15 @@ namespace MarketDataRTD
                             if (cache.ContainsKey("VAR"))
                                 double.TryParse(cache["VAR"].Replace("%", "").Replace(",", "."), NumberStyles.Any, CultureInfo.InvariantCulture, out variation);
 
-                            int tradesCountPayload = 0;
+                            int tradesCount = 0;
                             if (cache.ContainsKey("NEG"))
-                                int.TryParse(cache["NEG"].Replace(".", "").Replace(",", ""), out tradesCountPayload);
+                                int.TryParse(cache["NEG"].Replace(".", "").Replace(",", ""), out tradesCount);
 
                             var payload = new Dictionary<string, object>();
                             payload["asset"] = assetName;
                             payload["lastPrice"] = lastPrice;
                             payload["variation"] = variation;
-                            payload["tradesCount"] = tradesCountPayload;
+                            payload["tradesCount"] = tradesCount;
                             payload["data"]  = newTrades;
 
                             string jsonMsg = json.Serialize(payload);

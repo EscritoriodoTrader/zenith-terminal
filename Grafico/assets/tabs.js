@@ -12,6 +12,7 @@ const TabManager = (() => {
     // Estado interno das abas
     let _tabs = [];   // [{ ticker, period, var, exch }]
     let _activeIdx = 0;
+    let _changingAsset = false; // Guard: evita duplo changeAsset quando modal + watcher colidem
 
     // Referência ao container das abas no DOM
     let _container;  // .asset-tabs-component.slider (interno)
@@ -170,7 +171,10 @@ const TabManager = (() => {
         _activeIdx = _tabs.length - 1;
         _saveTabs();
         
-        window.Z.DataBridge?.changeAsset('T&T0', ticker);
+        // Só chama changeAsset se não veio de uma seleção na modal (que já chamou diretamente)
+        if (!_changingAsset) {
+            window.Z.DataBridge?.changeAsset('T&T0', ticker);
+        }
         window.Z.DataBridge?.loadHistoryFromDb(ticker);
     }
 
@@ -183,7 +187,9 @@ const TabManager = (() => {
         const tab = _tabs[idx];
         const currentAsset = Store.get('activeAsset');
         if (!currentAsset || currentAsset.ticker !== tab.ticker) {
+            _changingAsset = true; // Sinaliza para o watcher não duplicar o changeAsset
             Store.set('activeAsset', { ticker: tab.ticker, exch: tab.exch });
+            _changingAsset = false;
         }
 
         window.Z.DataBridge?.changeAsset('T&T0', tab.ticker);
@@ -270,7 +276,12 @@ const TabManager = (() => {
 
     document.addEventListener('DOMContentLoaded', init);
 
-    return { updateActiveVariation, updateActivePeriod };
+    return {
+        updateActiveVariation,
+        updateActivePeriod,
+        // Usado pela modal para sinalizar que ela já trata o changeAsset
+        _setChangingAsset(val) { _changingAsset = val; }
+    };
 })();
 
 window.Z.TabManager = TabManager;

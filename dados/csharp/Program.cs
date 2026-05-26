@@ -49,6 +49,29 @@ namespace MarketDataRTD
         const string CHANNEL = "T&T1";
         const int MAX_LINES = 500;
 
+        // ═══════════════════════════════════════════════════════
+        // MODO DIAGNÓSTICO CIRÚRGICO
+        // Ligue para estudar a dessincronização NEG vs grade RTD.
+        // Gera: dados\logs\sync_diag.log  (não polui o console)
+        // Desligue (false) em produção para máxima performance.
+        // ═══════════════════════════════════════════════════════
+        const bool DIAG_MODE = true;
+        static readonly string DIAG_FILE = System.IO.Path.Combine(
+            AppDomain.CurrentDomain.BaseDirectory, @"..\logs\sync_diag.log");
+
+        static readonly object _diagLock = new object();
+        static void DiagLog(string line)
+        {
+            if (!DIAG_MODE) return;
+            string entry = DateTime.Now.ToString("HH:mm:ss.fff") + " " + line;
+            Console.WriteLine("[DIAG] " + line); // Espelha no terminal também
+            lock (_diagLock)
+            {
+                try { System.IO.File.AppendAllText(DIAG_FILE, entry + "\r\n"); }
+                catch { }
+            }
+        }
+
         [STAThread]
         static void Main(string[] args)
         {
@@ -159,10 +182,12 @@ namespace MarketDataRTD
             // Cache de todos os valores do T&T1
             Dictionary<string, string> cache = new Dictionary<string, string>();
 
-            // Alinhamento NEG + T&T: o C# só processa quando AMBOS confirmarem atualização
-            int lastNeg = -1;          // último NEG visto
-            int pendingNegDelta = 0;   // delta acumulado aguardando confirmação do T&T
-            string lastRow0 = "";     // fingerprint da linha 0 do T&T na última leitura processada
+            // NEG Puro: usa apenas o contador de negócios da bolsa para detectar trades novos
+            int lastNeg = -1;
+
+            // DIAGNÓSTICO: fingerprint do último lote enviado para detectar duplicatas exatas
+            string lastBatchFingerprint = "";
+            long lastNegChangeMs = 0; // Momento exato em que o NEG moveu
 
             HttpClient http = new HttpClient();
             http.Timeout = TimeSpan.FromSeconds(2);
@@ -235,59 +260,91 @@ namespace MarketDataRTD
                             }
                         }
 
-                        // === PASSO 2: Alinhamento NEG + T&T (Handshake de dois canais) ===
-                        // Só processa trades quando AMBOS confirmarem: NEG delta acumulado
-                        // E a linha 0 do T&T mudou — garantindo sincronismo entre os canais.
+                        // === PASSO 2: NEG Puro com Alinhamento ===
+                        // Princípio: confia 100% no NEG como contador oficial da bolsa.
+                        // Quando NEG sobe K → aguarda 6ms para o Profit preencher a grade → lê as K primeiras linhas.
+                        // Sem janela deslizante, sem âncora, sem retry. Simples e sem duplicatas.
                         int currentNeg = 0;
                         if (cache.ContainsKey("NEG"))
                             currentNeg = (int)ParseProfitNumber(cache["NEG"]);
 
-                        // Fingerprint da linha 0: data + preço são suficientes para detectar mudança
-                        string currentRow0 = "";
-                        string r0dat = cache.ContainsKey("DAT_0") ? cache["DAT_0"] : "";
-                        string r0pre = cache.ContainsKey("PRE_0") ? cache["PRE_0"] : "";
-                        if (!string.IsNullOrWhiteSpace(r0dat) && r0dat != "---")
-                            currentRow0 = r0dat + "|" + r0pre;
-
                         int newTradesCount = 0;
+                        bool proceedToProcess = false;
 
                         if (lastNeg < 0)
                         {
-                            // Primeira rodada: estabelece a base sem processar nada.
-                            // Evita despejar a tabela inteira na inicialização.
+                            // Inicialização: registra o NEG base sem processar nada
                             lastNeg = currentNeg;
-                            lastRow0 = currentRow0;
-                            Console.WriteLine("[C# SYNC] Base inicial: NEG=" + currentNeg + " | Row0=" + currentRow0);
+                            Console.WriteLine("[C# NEG] Base inicial estabelecida. NEG=" + currentNeg);
                         }
-                        else
+                        else if (currentNeg > lastNeg)
                         {
-                            // Lado 1: acumula o delta do NEG
-                            if (currentNeg > lastNeg)
-                            {
-                                pendingNegDelta += currentNeg - lastNeg;
-                                lastNeg = currentNeg;
-                            }
+                            int delta = currentNeg - lastNeg;
+                            lastNeg = currentNeg;
+                            lastNegChangeMs = Environment.TickCount;
 
-                            // Lado 2: só dispara quando o T&T também confirmou nova linha no topo
-                            if (pendingNegDelta > 0 && currentRow0 != lastRow0 && !string.IsNullOrEmpty(currentRow0))
+                            // DIAGNÓSTICO PRÉ-SLEEP: captura o estado STALE da grade
+                            // (o que o cache tem ANTES de esperar o Profit preencher)
+                            string dat0Pre = cache.ContainsKey("DAT_0") ? cache["DAT_0"] : "(vazio)";
+                            string dat1Pre = cache.ContainsKey("DAT_1") ? cache["DAT_1"] : "(vazio)";
+                            string dat2Pre = cache.ContainsKey("DAT_2") ? cache["DAT_2"] : "(vazio)";
+
+                            if (DIAG_MODE)
+                                DiagLog(string.Format("NEG+{0} (NEG={1}) | PRÉ-SLEEP | DAT[0]={2} | DAT[1]={3} | DAT[2]={4}",
+                                    delta, currentNeg, dat0Pre, dat1Pre, dat2Pre));
+
+                            // ALINHAMENTO: aguarda o Profit preencher a grade RTD com os novos trades.
+                            Thread.Sleep(6);
+
+                            // LEITURA FRESCA: chama RefreshData novamente para capturar os dados
+                            // que o Profit acabou de escrever na grade durante o delay.
+                            // Sem isso, o cache abaixo estaria stale (dados de antes do NEG mover).
+                            System.Windows.Forms.Application.DoEvents();
+                            int freshCount = 0;
+                            try
                             {
-                                if (pendingNegDelta >= MAX_LINES)
+                                object freshResult = rtd.RefreshData(ref freshCount);
+                                if (freshCount > 0 && freshResult != null)
                                 {
-                                    newTradesCount = MAX_LINES;
-                                    Console.WriteLine("[C# SYNC] Tsunami! Delta=" + pendingNegDelta + ". Capturando todos os " + MAX_LINES + " trades.");
+                                    object[,] freshData = (object[,])freshResult;
+                                    for (int fi = 0; fi < freshCount; fi++)
+                                    {
+                                        int ftid = Convert.ToInt32(freshData[0, fi]);
+                                        if (!topicMap.ContainsKey(ftid)) continue;
+                                        cache[topicMap[ftid]] = Convert.ToString(freshData[1, fi]);
+                                    }
                                 }
-                                else
-                                {
-                                    newTradesCount = pendingNegDelta;
-                                }
-                                pendingNegDelta = 0;
-                                lastRow0 = currentRow0;
                             }
+                            catch { }
+
+                            // DIAGNÓSTICO PÓS-REFRESH: captura o estado FRESCO da grade
+                            // Compara com PRÉ para provar se o Sleep(6ms) foi suficiente
+                            string dat0Pos = cache.ContainsKey("DAT_0") ? cache["DAT_0"] : "(vazio)";
+                            string dat1Pos = cache.ContainsKey("DAT_1") ? cache["DAT_1"] : "(vazio)";
+                            string dat2Pos = cache.ContainsKey("DAT_2") ? cache["DAT_2"] : "(vazio)";
+                            bool dadoMudou = (dat0Pos != dat0Pre);
+                            long elapsed = Environment.TickCount - lastNegChangeMs;
+
+                            if (DIAG_MODE)
+                                DiagLog(string.Format("NEG+{0} | PÓS-REFRESH | freshTopics={1} | dadoMudou={2} | elapsedMs={3} | DAT[0]={4} | DAT[1]={5} | DAT[2]={6}",
+                                    delta, freshCount, dadoMudou ? "SIM" : "NÃO(STALE!)", elapsed, dat0Pos, dat1Pos, dat2Pos));
+
+                            newTradesCount = Math.Min(delta, MAX_LINES);
+                            proceedToProcess = true;
+
+                            if (delta > MAX_LINES)
+                                Console.WriteLine("[C# NEG] Rajada de " + delta + " trades — limitado a " + MAX_LINES + ". Perda de " + (delta - MAX_LINES) + " (limite do Profit).");
                         }
-                        // pendingNegDelta > 0 e T&T ainda não mudou = aguarda próximo ciclo
 
-                        // Processa APENAS a quantidade de trades novos detectada pelo delta do NEG
-                        List<object> newTrades = new List<object>();
+                        if (!proceedToProcess)
+                        {
+                            // Nenhum trade novo — aguarda o próximo ciclo sem gastar CPU
+                            Thread.Sleep(1);
+                            continue;
+                        }
+
+                        // Fotografia da tabela com dados FRESCOS (pós segundo RefreshData)
+                        string[] currentTableState = new string[MAX_LINES];
                         for (int i = 0; i < newTradesCount; i++)
                         {
                             string iStr = i.ToString();
@@ -297,7 +354,24 @@ namespace MarketDataRTD
                             string agr = cache.ContainsKey("AGR_" + iStr) ? cache["AGR_" + iStr] : "";
 
                             if (string.IsNullOrWhiteSpace(dat) || dat == "---" || dat.Contains("Inv") || string.IsNullOrWhiteSpace(pre))
-                                continue;
+                                currentTableState[i] = "";
+                            else
+                                currentTableState[i] = dat + "|" + pre + "|" + qul + "|" + agr;
+                        }
+
+                        // Processa as linhas confirmadas pelo NEG (as primeiras newTradesCount da tabela)
+                        List<object> newTrades = new List<object>();
+                        for (int i = 0; i < newTradesCount; i++)
+                        {
+                            if (string.IsNullOrEmpty(currentTableState[i])) continue;
+                            
+                            string[] parts = currentTableState[i].Split('|');
+                            if (parts.Length < 4) continue;
+                            
+                            string dat = parts[0];
+                            string pre = parts[1];
+                            string qul = parts[2];
+                            string agr = parts[3];
 
                             // Determina lado (comprador/vendedor agressor)
                             string side = "UNKNOWN";
@@ -347,7 +421,21 @@ namespace MarketDataRTD
                         // === PASSO 3: Envia os trades novos em UM único POST ===
                         if (newTrades.Count > 0)
                         {
-                            // Inverte a lista para ordem cronológica (antigo -> novo)
+                            // DIAGNÓSTICO: fingerprint do lote para detectar duplicatas exatas
+                            if (DIAG_MODE)
+                            {
+                                var sb = new StringBuilder();
+                                sb.Append("LOTE " + newTrades.Count + " trades | ");
+                                foreach (var t in newTrades)
+                                {
+                                    var td = (Dictionary<string, object>)t;
+                                    sb.Append(td["timestamp"] + "@" + td["price"] + "x" + td["quantity"] + td["side"] + " | ");
+                                }
+                                string batchFp = sb.ToString();
+                                bool isDuplicate = (batchFp == lastBatchFingerprint);
+                                DiagLog((isDuplicate ? "⚠️ DUPLICATA EXATA! " : "✅ LOTE NOVO | ") + batchFp);
+                                lastBatchFingerprint = batchFp;
+                            }
 
                             double lastPrice = 0;
                             if (cache.ContainsKey("ULT"))
@@ -377,6 +465,14 @@ namespace MarketDataRTD
                         }
 
                         totalReads += topicCount;
+
+                        // THROTTLE INTELIGENTE: Em modo ultra-frequência, dá 2ms extra ao Profit para
+                        // consolidar a grade antes do próximo RefreshData — reduz data-tearing significativamente.
+                        // Só aplica quando há muitos tópicos mudando ao mesmo tempo (explosão de mercado).
+                        if (topicCount > 500)
+                        {
+                            Thread.Sleep(2);
+                        }
                     }
                 }
                 catch (Exception e)

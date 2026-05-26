@@ -236,7 +236,17 @@ const LupaModal = (() => {
         _recentes.unshift(ticker);
         if (_recentes.length > 8) _recentes.pop();
 
+        // Marca flag no TabManager ANTES de setar o Store para que o watcher do tabs.js
+        // saiba que a modal já está tratando o changeAsset — evita mensagem duplicada.
+        if (window.Z.TabManager?._setChangingAsset) {
+            window.Z.TabManager._setChangingAsset(true);
+        }
         Store.set('activeAsset', info);
+        if (window.Z.TabManager?._setChangingAsset) {
+            window.Z.TabManager._setChangingAsset(false);
+        }
+
+        // A modal é a responsável pelo único changeAsset correto
         window.Z.DataBridge?.changeAsset('T&T0', ticker);
         if (ticker === 'HISTORICO') window.Z.DataBridge?.reloadHistory();
         else window.Z.DataBridge?.clearChart();

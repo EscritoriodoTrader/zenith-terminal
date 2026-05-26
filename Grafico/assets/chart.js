@@ -1318,20 +1318,20 @@ const ChartEngine = (() => {
                     const data = c.levels.get(pLevel) || { buy: 0, sell: 0 };
                     const vol = data.buy + data.sell;
 
+                    // Desenha exclusivamente o layout triplo de 3 colunas solicitado:
+                    // [ Saldo (35%) | Quantidade (30%) | Barra de Volume baseada no Saldo (35%) ]
+                    const col1Width = w * 0.35;
+                    const col2Width = w * 0.30;
+                    const col3Width = w * 0.35;
+
+                    const xStart = x - halfW;
+                    const x1 = xStart;
+                    const x2 = xStart + col1Width;
+                    const x3 = xStart + col1Width + col2Width;
+
                     if (vol > 0) {
                         const delta = data.buy - data.sell;
                         const absDelta = Math.abs(delta);
-
-                        // Desenha exclusivamente o layout triplo de 3 colunas solicitado:
-                        // [ Saldo (35%) | Quantidade (30%) | Barra de Volume baseada no Saldo (35%) ]
-                        const col1Width = w * 0.35;
-                        const col2Width = w * 0.30;
-                        const col3Width = w * 0.35;
-
-                        const xStart = x - halfW;
-                        const x1 = xStart;
-                        const x2 = xStart + col1Width;
-                        const x3 = xStart + col1Width + col2Width;
 
                         // --- 1. COLUNA: SALDO (Delta) ---
                         let col1Bg = 'transparent';
@@ -1411,6 +1411,18 @@ const ChartEngine = (() => {
                             _ctxMain.fillStyle = delta > 0 ? 'rgba(37, 169, 224, 0.85)' : 'rgba(235, 89, 72, 0.85)';
                             _ctxMain.fillRect(x3 + 1.5, levelY + 2.5, barW, levelH - 5);
                         }
+                    } else {
+                        // Preenche os "buracos" onde não houve negociação com o sinal "-"
+                        // Fundo da coluna Quantidade (ligeiramente mais translúcido para níveis vazios)
+                        _ctxMain.fillStyle = 'rgba(30, 30, 30, 0.4)';
+                        _ctxMain.fillRect(x2 + 0.5, levelY + 0.5, col2Width - 1, levelH - 1);
+
+                        // Desenha o sinal "-" centralizado
+                        const fontSize = Math.min(9, Math.max(6, Math.floor(col1Width / 3.5)));
+                        _ctxMain.font = `bold ${fontSize}px "Segoe UI", Monaco, monospace`;
+                        _ctxMain.fillStyle = '#666666'; // Cor bem apagada
+                        _ctxMain.textAlign = 'center';
+                        _ctxMain.fillText("-", x2 + col2Width / 2, levelY + levelH / 2);
                     }
                 }
             } else {

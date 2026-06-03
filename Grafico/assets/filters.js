@@ -8,6 +8,9 @@ window.Z.Filters = {
     // Contém múltiplos tiers para determinar a opacidade (alpha) do fundo.
     // Se o ativo não estiver listado, adota os valores do 'default'.
     highlightTiers: {
+        'NQ': {
+            tiers: [50, 100, 200, 300] // Nasdaq
+        },
         'MNQ': {
             tiers: [50, 100, 200, 300] // Nasdaq
         },

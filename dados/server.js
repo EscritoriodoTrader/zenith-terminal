@@ -14,6 +14,28 @@ const wss = new WebSocket.Server({ server });
 // Memória dos ativos detectados pelo Python
 const activeAssets = new Map();
 
+// Cache de UIDs para evitar que duplicados sejam enviados ao banco ou ao gráfico em tempo real
+const processedTradeIds = new Set();
+const MAX_CACHE_SIZE = 5000;
+
+function filterDuplicates(trades) {
+    if (!trades || !Array.isArray(trades)) return [];
+    return trades.filter(trade => {
+        if (!trade || !trade.id) return true;
+        if (processedTradeIds.has(trade.id)) {
+            return false; // Ignora o trade duplicado
+        }
+        processedTradeIds.add(trade.id);
+        
+        // Limita o tamanho para evitar consumo excessivo de memória
+        if (processedTradeIds.size > MAX_CACHE_SIZE) {
+            const firstKey = processedTradeIds.values().next().value;
+            processedTradeIds.delete(firstKey);
+        }
+        return true;
+    });
+}
+
 const staticPath = path.join(__dirname, '../Top');
 console.log(`[SISTEMA]: Servindo arquivos estáticos de: ${staticPath}`);
 
@@ -247,8 +269,9 @@ wss.on('connection', async (ws, req) => {
                     cmd.data = cmd.data.map(row => {
                         globalTradeSeq++;
                         const [ts, p, q, side, buyer, seller] = row;
+                        const priceStr = Number(p).toFixed(2).replace(/\.?0+$/, "");
                         return {
-                            id: `${cmd.asset}_${ts}_${p}_${q}_${side}_seq${globalTradeSeq}`,
+                            id: `${cmd.asset}_${side}_${ts}_${priceStr}_${q}_seq${globalTradeSeq}`,
                             timestamp: ts,
                             price: p,
                             quantity: q,
@@ -259,11 +282,14 @@ wss.on('connection', async (ws, req) => {
                         };
                     });
                 }
-                dbWriteBuffer.push(...cmd.data);
+                cmd.data = filterDuplicates(cmd.data);
+                if (cmd.data.length > 0) {
+                    dbWriteBuffer.push(...cmd.data);
+                }
             }
 
             // ROTEAMENTO CORRETO:
-            if (cmd.type === 'NEW_DATA') {
+            if (cmd.type === 'NEW_DATA' && cmd.data && cmd.data.length > 0) {
                 // Captura o ativo ativo que chegou do Python para exibir na Lupa
                 if (cmd.asset && cmd.asset !== '---' && cmd.asset !== 'HISTORICO') {
                     if (!activeAssets.has(cmd.asset)) {
@@ -390,8 +416,9 @@ app.post('/api/trades', async (req, res) => {
                     globalTradeSeq++;
                     // Formato enviado pelo Python: [ts, price, qty, side, acp_str, avd_str]
                     const [ts, p, q, side, buyer, seller] = row;
-                    // UID baseado no conteúdo para permitir deduplicação
-                    const uid = `${asset}_${ts}_${p}_${q}_${side}`;
+                    // UID baseado no conteúdo para permitir deduplicação com seq
+                    const priceStr = Number(p).toFixed(2).replace(/\.?0+$/, "");
+                    const uid = `${asset}_${side}_${ts}_${priceStr}_${q}_seq${globalTradeSeq}`;
                     return {
                         id: uid,
                         timestamp: ts,
@@ -410,26 +437,32 @@ app.post('/api/trades', async (req, res) => {
             }
 
 
-            await db.insertTrades(processedData, asset || 'DESCONHECIDO');
             if (!isHistory) {
-                // Adiciona o ativo ativo detectado à Lupa se não existir
-                if (asset && asset !== '---' && asset !== 'HISTORICO') {
-                    if (!activeAssets.has(asset)) {
-                        console.log(`[ZENITH] ✅ Novo ativo detectado via C# HTTP POST: ${asset}`);
+                processedData = filterDuplicates(processedData);
+            }
+
+            if (processedData.length > 0) {
+                await db.insertTrades(processedData, asset || 'DESCONHECIDO');
+                if (!isHistory) {
+                    // Adiciona o ativo ativo detectado à Lupa se não existir
+                    if (asset && asset !== '---' && asset !== 'HISTORICO') {
+                        if (!activeAssets.has(asset)) {
+                            console.log(`[ZENITH] ✅ Novo ativo detectado via C# HTTP POST: ${asset}`);
+                        }
+                        activeAssets.set(asset, {
+                            lastPrice: lastPrice || 0,
+                            variation: variation || 0
+                        });
                     }
-                    activeAssets.set(asset, {
+
+                    broadcastToBrowsers({
+                        type: 'NEW_DATA',
+                        asset: asset || 'DESCONHECIDO',
                         lastPrice: lastPrice || 0,
-                        variation: variation || 0
+                        variation: variation || 0,
+                        data: processedData
                     });
                 }
-
-                broadcastToBrowsers({
-                    type: 'NEW_DATA',
-                    asset: asset || 'DESCONHECIDO',
-                    lastPrice: lastPrice || 0,
-                    variation: variation || 0,
-                    data: processedData
-                });
             }
         }
         res.json({ success: true, count: processedData.length });

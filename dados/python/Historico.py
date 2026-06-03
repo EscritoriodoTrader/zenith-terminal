@@ -254,7 +254,9 @@ def parse_history_file(file_path, asset_name):
         quantity = t["quantity"]
         side = t["side"]
         
-        base_id = f"{asset_name}_{side}_{ts}_{price}_{quantity}"
+        # Formata o preço com até 2 casas decimais e remove zeros/pontos extras para alinhar com o C# ("0.##")
+        price_str = f"{price:.2f}".rstrip("0").rstrip(".")
+        base_id = f"{asset_name}_{side}_{ts}_{price_str}_{quantity}"
         ts_counters[base_id] = ts_counters.get(base_id, 0) + 1
         uid = f"{base_id}_seq{ts_counters[base_id]}"
         
